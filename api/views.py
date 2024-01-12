@@ -168,6 +168,8 @@ class RawMaterialsInventoryHistoryPageView(View):
 class ProductsPageView(View):
     def get(self, request):
         product = Product.objects.all()
+
+        print(product)
         # Check if there is a product
         if not product.exists():
             return JsonResponse({'data': 'No Registered Product'})
