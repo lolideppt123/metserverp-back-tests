@@ -17,7 +17,9 @@ from dateutil.relativedelta import relativedelta
 class RawMaterialsPageView(View):
     def get(self, request):
         materials = RawMaterials.objects.all()
-
+        # Check if there is a material
+        if not materials.exists():
+            return JsonResponse({'data': 'No Registered Material'})
         material_serialized = MaterialsSerializer(materials, many=True)
         return JsonResponse(material_serialized.data, safe=False)
 
@@ -47,9 +49,13 @@ class RawMaterialsPageView(View):
     
 class RawMaterialsInventoryPageView(View):
     def get(self, request):
-
+        materials = RawMaterials.objects.all()
+        # Check if there is a material
+        if not materials.exists():
+            return JsonResponse({'data': 'No Registered Material'})
+        
         material_inventory_data = []
-        for material in RawMaterials.objects.all():
+        for material in materials:
             material_inventory = RawMaterials_Inventory.objects.filter(material_name=material.pk)
             material_unit = Unit.objects.get(unit_name=material.material_unit).unit_name
             if material_inventory.exists():
@@ -162,7 +168,9 @@ class RawMaterialsInventoryHistoryPageView(View):
 class ProductsPageView(View):
     def get(self, request):
         product = Product.objects.all()
-        
+        # Check if there is a product
+        if not product.exists():
+            return JsonResponse({'data': 'No Registered Product'})
         product_serializer = ProductSerializer(product, many=True)
         return JsonResponse(product_serializer.data, safe=False)
     
@@ -254,9 +262,13 @@ class EditProductsPageView(View):
 
 class ProductInventoryPageView(View):
     def get(self, request):
+        products = Product.objects.all()
+        # Check if there is a product
+        if not products.exists():
+            return JsonResponse({'data': 'No Registered Product'})
 
         product_inventory_data = []
-        for product in Product.objects.all():
+        for product in products:
             product_inventory = Product_Inventory.objects.filter(product_name=product.pk)
             product_unit = Unit.objects.get(unit_name=product.product_unit).unit_name
             if product_inventory.exists():
@@ -455,19 +467,9 @@ class InventoryHistoryPageView(View):
 class SalesPageView(View):
     def get(self, request):
         sales = Sales.objects.all().order_by("-sales_date")
-        
-        # total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
-        # total_sales_price = sales.aggregate(total_price=Sum('sales_total_price'))
-        # total_sales_margin = sales.aggregate(total_margin=Sum('sales_margin'))
-
-        # sales_cost = float(*total_sales_cost.values())
-        # sales_price = float(*total_sales_price.values())
-        # sales_margin = float(*total_sales_margin.values())
-
-        # data_set = ({"sales_cost":sales_cost})
-        # data_set.update({"sales_price":sales_price})
-        # data_set.update({"sales_margin":sales_margin})
-        # data_list = [data_set]
+        # Check if there is a sales
+        if not sales.exists():
+            return JsonResponse({'data': 'No Registered Sales'})
 
         sales_serializer = SalesSerializer(sales, many=True)
         # return JsonResponse({"serialized":sales_serializer.data, "sales_totals": data_list}, safe=False)
