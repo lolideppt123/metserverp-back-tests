@@ -75,8 +75,8 @@ admin.site.register(RawMaterials_InventoryTransaction, RawMaterialsInventoryTran
 admin.site.register(InventoryTransaction, InventoryTransactionAdmin)
 
 admin.site.register(RawMaterials_Product, RawMaterialsProductAdmin)
-# admin.site.register(RawMaterials, RawMaterialsAdmin)
-# admin.site.register(Product, ProductAdmin)
-# admin.site.register(Customer, CustomerAdmin)
+admin.site.register(RawMaterials, RawMaterialsAdmin)
+admin.site.register(Product, ProductAdmin)
+admin.site.register(Customer, CustomerAdmin)
 admin.site.register(Unit, UnitAdmin)
 admin.site.register(UnitCategory)
