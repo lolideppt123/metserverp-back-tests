@@ -826,6 +826,8 @@ class SalesSummaryDataTableView(View):
         query = data['query']
 
         sales = Sales.objects.filter(sales_date__gte=start_date, sales_date__lt=end_date)
+        if not sales.exists():
+            return JsonResponse({"data": "No Sales data to show"})
         sales_serializer = SalesSerializer(sales, many=True)
 
         if query == "ALL":
