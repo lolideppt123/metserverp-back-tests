@@ -1,0 +1,37 @@
+[
+    {
+        "model": "api.UnitCategory",
+        "pk": 1,
+        "fields": {
+            "unit_category": "Quantity"
+        }
+    },
+    {
+        "model": "api.UnitCategory",
+        "pk": 2,
+        "fields": {
+            "unit_category": "Mass"
+        }
+    },
+    {
+        "model": "api.UnitCategory",
+        "pk": 3,
+        "fields": {
+            "unit_category": "Length"
+        }
+    },
+    {
+        "model": "api.UnitCategory",
+        "pk": 4,
+        "fields": {
+            "unit_category": "Volume"
+        }
+    },
+    {
+        "model": "api.UnitCategory",
+        "pk": 5,
+        "fields": {
+            "unit_category": "Area"
+        }
+    }
+]

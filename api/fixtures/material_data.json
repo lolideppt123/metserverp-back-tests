@@ -1,0 +1,57 @@
+[
+    {
+        "model": "api.RawMaterials",
+        "pk": 1,
+        "fields": {
+            "material_name": "Material 1",
+            "material_min_stock": 50,
+            "material_unit": 2,
+            "material_note": "",
+            "date_created": "2024-01-20 19:30"
+        }
+    },
+    {
+        "model": "api.RawMaterials",
+        "pk": 2,
+        "fields": {
+            "material_name": "Material 2",
+            "material_min_stock": 100,
+            "material_unit": 1,
+            "material_note": "",
+            "date_created": "2024-01-20 19:30"
+        }
+    },
+    {
+        "model": "api.RawMaterials",
+        "pk": 3,
+        "fields": {
+            "material_name": "Material 3",
+            "material_min_stock": 75,
+            "material_unit": 2,
+            "material_note": "",
+            "date_created": "2024-01-20 19:30"
+        }
+    },
+    {
+        "model": "api.RawMaterials",
+        "pk": 4,
+        "fields": {
+            "material_name": "Material 4",
+            "material_min_stock": 50,
+            "material_unit": 2,
+            "material_note": "",
+            "date_created": "2024-01-20 19:30"
+        }
+    },
+    {
+        "model": "api.RawMaterials",
+        "pk": 5,
+        "fields": {
+            "material_name": "Material 5",
+            "material_min_stock": 70,
+            "material_unit": 2,
+            "material_note": "",
+            "date_created": "2024-01-20 19:30"
+        }
+    }
+]

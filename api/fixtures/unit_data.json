@@ -1,0 +1,92 @@
+[
+    {
+        "model": "api.Unit",
+        "pk": 1,
+        "fields": {
+            "unit_name": "Piece",
+            "unit_abbv": "pc",
+            "unit_category": 1
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 2,
+        "fields": {
+            "unit_name": "Kilogram",
+            "unit_abbv": "kg",
+            "unit_category": 2
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 3,
+        "fields": {
+            "unit_name": "Pounds",
+            "unit_abbv": "lb",
+            "unit_category": 2
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 4,
+        "fields": {
+            "unit_name": "Inch",
+            "unit_abbv": "in",
+            "unit_category": 3
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 5,
+        "fields": {
+            "unit_name": "Feet",
+            "unit_abbv": "ft",
+            "unit_category": 3
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 6,
+        "fields": {
+            "unit_name": "Meter",
+            "unit_abbv": "m",
+            "unit_category": 3
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 7,
+        "fields": {
+            "unit_name": "Liter",
+            "unit_abbv": "L",
+            "unit_category": 4
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 8,
+        "fields": {
+            "unit_name": "Gallon",
+            "unit_abbv": "gal",
+            "unit_category": 4
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 9,
+        "fields": {
+            "unit_name": "Sq. Feet",
+            "unit_abbv": "sqft",
+            "unit_category": 5
+        }
+    },
+    {
+        "model": "api.Unit",
+        "pk": 10,
+        "fields": {
+            "unit_name": "Sq. Meter",
+            "unit_abbv": "sqm",
+            "unit_category": 5
+        }
+    }
+]
