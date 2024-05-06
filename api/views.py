@@ -916,7 +916,7 @@ class SalesPageView(APIView):
         products = data['products']
         
         if sales_invoice == '':
-            sales_invoice = uuid.uuid4()
+            sales_invoice = f'noinv-{sales_date}-' + uuid.uuid4()
         invoice_obj = SalesInvoice.objects.create(sales_invoice=sales_invoice, invoice_date=sales_date, invoice_note=data['sales_note'])
         customer_obj, create = Customer.objects.get_or_create(company_name=customer)
 
