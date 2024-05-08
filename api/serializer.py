@@ -136,7 +136,9 @@ class SalesSerializer(serializers.ModelSerializer):
             'sales_status',
             'sales_note',
             'sales_paid_date',
+            'sales_transaction'
         )
+        depth = 2 # https://testdriven.io/blog/drf-serializers/
 
 class SalesInvoiceSerializer(serializers.ModelSerializer):
     invoice_paid_date = serializers.DateTimeField(format="%Y-%m-%d")

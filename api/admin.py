@@ -67,6 +67,7 @@ class SupplierAdmin(admin.ModelAdmin):
 class SalesAdmin(admin.ModelAdmin):
     list_display = [
         "pk",
+        # "get_supplier",
         "sales_dr",
         "sales_invoice",
         "sales_date",
@@ -89,6 +90,10 @@ class SalesAdmin(admin.ModelAdmin):
         'sales_note',
         ]
     ordering = ['-sales_date', '-created_at', '-pk']
+
+    # def get_supplier(self, obj):
+    #     print(obj.inventorytransaction_set.get(sales_pk=obj.pk).inventory_pk.supplier)
+    #     return obj.inventorytransaction_set.get(sales_pk=obj.pk).inventory_pk.supplier
 
 class SalesInvoiceAdmin(admin.ModelAdmin):
     list_display = [

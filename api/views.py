@@ -944,7 +944,7 @@ class SalesPageView(APIView):
             # Procedure Deducts Inventory Stock, creates Sales Instance, creates InventoryHistory Instance
             addSalesProcedure(product_inventory, item['sales_quantity'], data)
             
-        return JsonResponse({"message": "has successfully deleted."})
+        return JsonResponse({"message": "Sales successfully Added."})
         # return JsonResponse({"message": f"Sales successfully saved.\nInvoice: {invoice_obj} Customer: {obj.company_name} Order Date:{sales_date.strftime('%b-%d-%Y')}"})
 
     def put(self, request, id):
