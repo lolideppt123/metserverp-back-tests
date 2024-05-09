@@ -1042,6 +1042,48 @@ class SalesPageView(APIView):
             return JsonResponse({"message": f"Delete action failed. {sales.product_name} already has linked records."}, status=404)
         return JsonResponse({"message": f"Invoice#: {sales.sales_invoice} {sales.product_name} has successfully deleted."})
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def getSalesFilteredData(request):
+
+    data = json.loads(request.body.decode('utf-8'))
+    print(data)
+    if data['productName'] is not None and data['SalesFilter'] is not None:
+
+        getYear = datetime.date.today().year
+        getEndDay = calendar.monthrange(getYear, 12)
+
+        getStartDate = str(getYear) + '-01-01'
+        getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
+
+        date_range = getDateRange(getStartDate, getEndDate)
+
+        data_list = []
+        for index in date_range:
+            query = []
+            sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+            sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
+            for sale in sales:
+                for item in data['productName']:
+                    if sale.inventorytransaction_set.first().inventory_pk.supplier.id == item or sale.product_name.product_name == item:
+                        query.append(sale)
+        
+            sales_serializer = SalesSerializer(query, many=True)
+            new_serializer = list(sales_serializer.data)
+
+            sales_list = getSalesTotals(sales, "TOTAL_SALES") # helper.py
+            cumm_sales_list = getSalesTotals(sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+
+            data_title = str(index[0].year) + "-" + str(index[0].month)
+            new_serializer.append(sales_list)
+            new_serializer.append(cumm_sales_list)
+            new_serializer.append({"data_title":data_title})
+            data_list.append(new_serializer)
+
+        return JsonResponse(data_list, safe=False)
+
+    return JsonResponse([], safe=False)
+
 class SalesInvoicePageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = SalesInvoice.objects.all() # This is needed even we don't use it to perform permission_classes
