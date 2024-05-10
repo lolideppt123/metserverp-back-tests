@@ -62,7 +62,7 @@ class CustomerAdmin(admin.ModelAdmin):
     list_display = ["company_name", "contact_person", "contact_number", "company_address"]
 
 class SupplierAdmin(admin.ModelAdmin):
-    list_display = ["company_name", "contact_person", "contact_number", "company_address"]
+    list_display = ["company_name", "pk", "contact_person", "contact_number", "company_address"]
 
 class SalesAdmin(admin.ModelAdmin):
     list_display = [
@@ -118,6 +118,6 @@ admin.site.register(RawMaterials_Product, RawMaterialsProductAdmin)
 # admin.site.register(RawMaterials, RawMaterialsAdmin)
 admin.site.register(Product, ProductAdmin)
 admin.site.register(Customer, CustomerAdmin)
-# admin.site.register(Supplier, SupplierAdmin)
+admin.site.register(Supplier, SupplierAdmin)
 # admin.site.register(Unit, UnitAdmin)
 # admin.site.register(UnitCategory)

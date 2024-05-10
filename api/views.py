@@ -1048,7 +1048,20 @@ def getSalesFilteredData(request):
 
     data = json.loads(request.body.decode('utf-8'))
     print(data)
-    if data['productName'] is not None and data['SalesFilter'] is not None:
+    if data['productName'] is not None or data['customer'] is not None and data['SalesFilter'] is not None:
+        
+        if(data['productName'] is None):
+            data['productName'] = []
+        if(data['productName'] is None):
+            data['customer'] = []
+
+        supplier_filter = []
+        product_filter = []
+        for item in data['productName']:
+            if(type(item) == str):
+                product_filter.append(item)
+            if(type(item) == int):
+                supplier_filter.append(item)
 
         getYear = datetime.date.today().year
         getEndDay = calendar.monthrange(getYear, 12)
@@ -1060,19 +1073,18 @@ def getSalesFilteredData(request):
 
         data_list = []
         for index in date_range:
-            query = []
+
             sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
             sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
-            for sale in sales:
-                for item in data['productName']:
-                    if sale.inventorytransaction_set.first().inventory_pk.supplier.id == item or sale.product_name.product_name == item:
-                        query.append(sale)
+            
+            sales_filtered = sales.filter(Q(sales_transaction__supplier__in=supplier_filter) | Q(sales_transaction__product_name__product_name__in=product_filter)).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+            sales_commulative_filtered = sales_commulative.filter(Q(sales_transaction__supplier__in=supplier_filter) | Q(sales_transaction__product_name__product_name__in=product_filter))
         
-            sales_serializer = SalesSerializer(query, many=True)
+            sales_serializer = SalesSerializer(sales_filtered, many=True)
             new_serializer = list(sales_serializer.data)
 
-            sales_list = getSalesTotals(sales, "TOTAL_SALES") # helper.py
-            cumm_sales_list = getSalesTotals(sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+            sales_list = getSalesTotals(sales_filtered, "TOTAL_SALES") # helper.py
+            cumm_sales_list = getSalesTotals(sales_commulative_filtered, "CUMM_TOTAL_SALES") # helper.py
 
             data_title = str(index[0].year) + "-" + str(index[0].month)
             new_serializer.append(sales_list)
