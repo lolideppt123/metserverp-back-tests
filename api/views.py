@@ -1048,12 +1048,7 @@ def getSalesFilteredData(request):
 
     data = json.loads(request.body.decode('utf-8'))
     print(data)
-    if data['productName'] is not None or data['customer'] is not None and data['SalesFilter'] is not None:
-        
-        if(data['productName'] is None):
-            data['productName'] = []
-        if(data['productName'] is None):
-            data['customer'] = []
+    if data['productName'] is not None and data['SalesFilter'] is not None:
 
         supplier_filter = []
         product_filter = []
