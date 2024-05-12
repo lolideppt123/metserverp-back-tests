@@ -31,7 +31,6 @@ urlpatterns = [
     path('sales/transaction/<int:id>/edit', SalesPageView.as_view(), name='sales_edit'),
     path('sales/sales-summary/data-chart', SalesSummaryChartDataView.as_view(), name='sales_summary_chart'),
     path('sales/sales-summary/data-table', SalesSummaryDataTableView.as_view(), name='sales_summary_table'),
-    path('sales/sales-summary/data-table-totals', SalesSummaryDataTableTotalsView.as_view(), name='sales_summary_table_totals'),
     path('sales-data-filter/', getSalesFilteredData, name='sales_filter'),
     
 
