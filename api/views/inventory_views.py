@@ -474,25 +474,89 @@ class InventorySummaryPageView(APIView):
         pass
     def post(self, request):
         data = json.loads(request.body.decode('utf-8'))
+
+        filter = data['filter']
         start_date = data['start']
         end_date = data['end']
 
-        product_inventory = Product_Inventory.objects.filter(ordered_date__gte=start_date, ordered_date__lte=end_date)
-        product_inventory_serializer = ProductInventorySerializer(product_inventory, many=True)
-        # print(product_inventory_serializer.data)
         data_list = []
-        for product in Product.objects.all():
-            product_inventory = Product_Inventory.objects.filter(ordered_date__gte=start_date, ordered_date__lte=end_date, product_name=product.pk)
-            if product_inventory.exists():
-                total_inventory_cost = product_inventory.aggregate(total_cost=Sum('product_total_cost'))
-                print(total_inventory_cost.values())
-                total_cost = float(*total_inventory_cost.values())
-                data_set = ({'product_name': product.product_name})
-                data_set.update({'total_cost': total_cost})
-                data_list.append(data_set)
+        if(filter == ''):
+
+            products = Product.objects.all()
+            materials = RawMaterials.objects.all()
+
+            for product in products:
+
+                product_inventory = Product_Inventory.objects.filter(product_name=product, ordered_date__gte=start_date, ordered_date__lte=end_date)
+                sales = Sales.objects.filter(product_name=product, sales_date__gte=start_date, sales_date__lte=end_date)
+
+
+                prod_inventory_total_quantity = product_inventory.aggregate(total_quantity_bought=Sum('quantity'))
+                prod_inventory_total_stock_left = product_inventory.aggregate(total_stock_left=Sum('product_stock_left'))
+
+
+                sales_COGS = sales.aggregate(total_COGS=Sum('sales_total_cost'))
+                prod_inventory_total_quantity_cost = product_inventory.aggregate(total_quantity_cost=Sum('product_total_cost'))
+
+                data_set = {"pk": f"{product.pk}_{product.product_name}"}
+                data_set.update({"name": product.product_name})
+                if(product_inventory.exists()):
+                    data_set.update(prod_inventory_total_quantity)
+                    data_set.update(prod_inventory_total_stock_left)
+                    data_set.update(sales_COGS)
+                    data_set.update(prod_inventory_total_quantity_cost)
+
+                    # There might be an inventory but no sales
+                    if(sales_COGS['total_COGS'] is None):
+                        data_set.update({"turn_over_ratio": 0})
+                    else:
+                        data_set.update({'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_quantity_cost['total_quantity_cost']})
+
+                    data_list.append(data_set)
+
+                else:
+                    data_set.update({"total_quantity_bought": 0})
+                    data_set.update({"total_stock_left": 0})
+                    data_set.update({"total_COGS": 0})
+                    data_set.update({"total_quantity_cost": 0})
+                    data_set.update({"turn_over_ratio": 0})
+
+                    data_list.append(data_set)
+
+
+                # # print(product, "===", product_inventory.exists())
+                # print(product, "===", prod_inventory_total_quantity)
+                # print(product, "===", prod_inventory_total_stock_left)
+
+                # print(product, "===", sales_COGS)
+                # print(product, "===", prod_inventory_total_quantity_cost)
+                # if(sales_COGS['total_COGS'] is not None):
+                #     print(product, "===", {'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_quantity_cost['total_quantity_cost']})
+                # else:
+                #     print(product, "===", {'turn_over_ratio': 0})
+                # print("=======================================")
+
+                # if(not product_inventory):
+                #     pass
+                # #     print(product)
+                # # print(product_inventory)
+
+            for material in materials:
+
+                material_inventory = RawMaterials_Inventory.objects.filter(material_name=material, ordered_date__gte=start_date, ordered_date__lte=end_date)
+
+
+                product_inventory = Product_Inventory.objects.filter(product_name=product, ordered_date__gte=start_date, ordered_date__lte=end_date)
+                sales = Sales.objects.filter(product_name=product, sales_date__gte=start_date, sales_date__lte=end_date)
+
+
+
+        print(data)
+        
         
 
         return JsonResponse(data_list , safe=False)
+        # return JsonResponse([], safe=False)
 
 
 

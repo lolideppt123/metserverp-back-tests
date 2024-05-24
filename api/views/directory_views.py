@@ -103,12 +103,12 @@ class ProductsPageView(APIView):
 
             prod_mat = RawMaterials_Product.objects.filter(product=product_item)
             sample = RawMaterials_ProductSerializer(prod_mat, many=True)
-            product_serializer = ProductSerializer(product_item)
+            # product_serializer = ProductSerializer(product_item)
             return JsonResponse(sample.data, safe=False)
 
-
         product_serializer = ProductSerializer(product, many=True)
-        return JsonResponse(product_serializer.data, safe=False)
+        serialized_data = product_serializer.data
+        return JsonResponse(serialized_data, safe=False)
     
     def post(self, request):
         data = json.loads(request.body.decode('utf-8'))
