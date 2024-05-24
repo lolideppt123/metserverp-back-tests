@@ -474,6 +474,8 @@ class InventorySummaryPageView(APIView):
         pass
     def post(self, request):
         data = json.loads(request.body.decode('utf-8'))
+        getYear = datetime.date.today().year
+        yearBeg = str(getYear) + '-01-01'
 
         filter = data['filter']
         start_date = data['start']
@@ -490,13 +492,13 @@ class InventorySummaryPageView(APIView):
                 product_inventory = Product_Inventory.objects.filter(product_name=product, ordered_date__gte=start_date, ordered_date__lte=end_date)
                 sales = Sales.objects.filter(product_name=product, sales_date__gte=start_date, sales_date__lte=end_date)
 
-
                 prod_inventory_total_quantity = product_inventory.aggregate(total_quantity_bought=Sum('quantity'))
                 prod_inventory_total_stock_left = product_inventory.aggregate(total_stock_left=Sum('product_stock_left'))
 
-
+                # Gets sales totalcost, inv_Quantity totalcost, inv_StockLeft total cost
                 sales_COGS = sales.aggregate(total_COGS=Sum('sales_total_cost'))
                 prod_inventory_total_quantity_cost = product_inventory.aggregate(total_quantity_cost=Sum('product_total_cost'))
+                prod_inventory_total_stock_left_cost = product_inventory.filter(product_stock_left__gt=0).aggregate(total_stock_cost=Sum('product_total_cost'))
 
                 data_set = {"pk": f"{product.pk}_{product.product_name}"}
                 data_set.update({"name": product.product_name})
@@ -505,12 +507,13 @@ class InventorySummaryPageView(APIView):
                     data_set.update(prod_inventory_total_stock_left)
                     data_set.update(sales_COGS)
                     data_set.update(prod_inventory_total_quantity_cost)
+                    data_set.update(prod_inventory_total_stock_left_cost)
 
                     # There might be an inventory but no sales
-                    if(sales_COGS['total_COGS'] is None):
+                    if(sales_COGS['total_COGS'] is None or prod_inventory_total_stock_left_cost['total_stock_cost'] is None):
                         data_set.update({"turn_over_ratio": 0})
                     else:
-                        data_set.update({'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_quantity_cost['total_quantity_cost']})
+                        data_set.update({'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_stock_left_cost['total_stock_cost']})
 
                     data_list.append(data_set)
 
@@ -519,21 +522,22 @@ class InventorySummaryPageView(APIView):
                     data_set.update({"total_stock_left": 0})
                     data_set.update({"total_COGS": 0})
                     data_set.update({"total_quantity_cost": 0})
+                    data_set.update({"total_stock_cost": 0})
                     data_set.update({"turn_over_ratio": 0})
 
                     data_list.append(data_set)
 
 
-                # # print(product, "===", product_inventory.exists())
-                # print(product, "===", prod_inventory_total_quantity)
-                # print(product, "===", prod_inventory_total_stock_left)
+                # print(product, "===", product_inventory)
+                # print(product, "===", product_inventory.filter(product_stock_left__gt=0))
+                # print(product, "===", prod_inventory_total_stock_left_cost)
 
                 # print(product, "===", sales_COGS)
                 # print(product, "===", prod_inventory_total_quantity_cost)
-                # if(sales_COGS['total_COGS'] is not None):
-                #     print(product, "===", {'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_quantity_cost['total_quantity_cost']})
-                # else:
+                # if(sales_COGS['total_COGS'] is None or prod_inventory_total_stock_left_cost['total_stock_cost'] is None):
                 #     print(product, "===", {'turn_over_ratio': 0})
+                # else:
+                #     print(product, "===", {'turn_over_ratio': sales_COGS['total_COGS'] / prod_inventory_total_stock_left_cost['total_stock_cost']})
                 # print("=======================================")
 
                 # if(not product_inventory):
