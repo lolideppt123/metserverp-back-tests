@@ -37,7 +37,7 @@ def quantityValidatorHelper(quantity):
         return 0
     else: 
         return Decimal(quantity)
-    
+
 # Validate AddProductInventory (Manufactured)
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -104,10 +104,10 @@ def validateAddProductInventory(request):
         return JsonResponse(main_data_list, safe=False)
     return JsonResponse([], safe=False)
 
-# Validates AddSalesForm
-# Check if the product has stock
-# check if product has enough stock
-# get price per unit of product
+# Validates AddSalesForm | EditSalesForm
+# Check if the product has stock                (AddSalesForm, EditSalesForm)
+# check if product has enough stock             (AddSalesForm, EditSalesForm)
+# get price per unit of product                 (AddSalesForm)
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def getUnitPriceProduct(request):
@@ -117,18 +117,36 @@ def getUnitPriceProduct(request):
     sales_date = data['sales_date']
     index = data['itemNo']
 
-    if sales_quantity == "": 
+    # EditSales Page has object current sale quantity & sales difference
+    # sales difference -> User increase/decrease sales quantity.
+    # decrease quantity -> sales difference will be 0 (value decrease by 10 value is 0)
+    # increse quantity -> sales difference will be actual INCREASED value (value increased by 10 value is 10)
+    try:
+        len(sales_quantity)
+        curr_quantity = sales_quantity[0]['quantity']
+        sales_quantity = sales_quantity[0]['sales_diff']
+    except TypeError:
+        pass
+
+    if sales_quantity == "" or sales_quantity is None: 
         sales_quantity = 0 
     else: 
         sales_quantity = Decimal(sales_quantity)
 
     if product_name == "" or sales_date == "":
         return JsonResponse([], safe=False)
+    
+    # If there's index means AddSales page is using it. 
+    if not index is None:
+        label = f'products.{index}.sales_quantity'
+    # Else EditSales page
+    else:
+        label = 'sales_quantity'
 
     get_product_inventory = Product_Inventory.objects.filter(product_name=Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
     if not get_product_inventory.exists():
         # return JsonResponse({'label':'sales_quantity', 'message':f'{product_name} has NO stock at the moment'}, status=500)
-        return JsonResponse({'label':f'products.{index}.sales_quantity', 'message':f'{product_name} has NO stock at the moment'}, status=500)
+        return JsonResponse({'label':label, 'message':f'{product_name} has NO stock at the moment'}, status=500)
     
     # Sum of current stock have for the product selected
     total_product_inventory = get_product_inventory.aggregate(total_inventory=Sum('product_stock_left'))
@@ -136,7 +154,11 @@ def getUnitPriceProduct(request):
     # Check if there is enough stock in inventory
     if total_product_inventory['total_inventory'] < sales_quantity:
         # return JsonResponse({'label':'sales_quantity', 'message':f'{product_name} has {total_product_inventory["total_inventory"]} in stock'}, status=500)
-        return JsonResponse({'label':f'products.{index}.sales_quantity', 'message':f'{product_name} has only {total_product_inventory["total_inventory"]} in stock'}, status=500)
+        return JsonResponse({'label':label, 'message':f'{product_name} has only {total_product_inventory["total_inventory"]} in stock. Registed {curr_quantity}'}, status=500)
+
+    # EditSales Page will need to exit early.
+    if index is None:
+        return JsonResponse([], safe=False)
 
     properties = [
         'ordered_date',

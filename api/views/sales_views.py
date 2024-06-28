@@ -73,7 +73,7 @@ class SalesPageView(APIView):
         products = data['products']
         
         if sales_invoice == '':
-            sales_invoice = f'noinv-{sales_date}-' + uuid.uuid4()
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
         invoice_obj = SalesInvoice.objects.create(sales_invoice=sales_invoice, invoice_date=sales_date, invoice_note=data['sales_note'])
         customer_obj, create = Customer.objects.get_or_create(company_name=customer)
 
@@ -96,8 +96,7 @@ class SalesPageView(APIView):
 
             # Query inventory less than or equal sales date
             product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=item['product']), ordered_date__lte=sales_date)
-            for i in data:
-                print(i, " : ", data[i])
+
             # Procedure Deducts Inventory Stock, creates Sales Instance, creates InventoryHistory Instance
             addSalesProcedure(product_inventory, item['sales_quantity'], data)
             
@@ -110,75 +109,29 @@ class SalesPageView(APIView):
         sales_invoice = data['sales_invoice']
         customer = data['customer']['company_name']
 
+        product_name = data['product_name']
+        quantity_diff = data['quantity_diff']
+
         # Allows the user to insert Sales into an invoice
         if sales_invoice == '':
-            sales_invoice = uuid.uuid4()
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
         invoice_obj, created = SalesInvoice.objects.get_or_create(sales_invoice=sales_invoice, invoice_date=sales_date)
         cust_obj = get_object_or_404(Customer, company_name=customer)
 
         # reassign values back as validated data
         data['sales_invoice'] = invoice_obj
         data['customer']['company_name'] = cust_obj
-        # Save changes
-        updated_sales = update_sales_obj(id, data)
-        updated_sales.save()
-        
-        """""
-        # if not sales.product_name.product_name == product_name or not sales.sales_date == sales_date or not sales.sales_quantity == sales_quantity:
-        #     print("im here")
-        #     # sales_margin = Decimal(total_price) - Decimal(total_cost)
-        #     sales_margin_percent = addSalesValidation(product_name, customer)
 
-        #     # Get product name inventory less that sales date. Nearest item to the sales date first
-        #     product_inventory = Product_Inventory.objects.filter(
-        #         product_name=Product.objects.get(product_name=sales.product_name), 
-        #         ordered_date__lte=sales.sales_date
-        #     ).order_by('-ordered_date')
 
-        #     # Return sales quantity to inventory
-        #     quantity_to_return = sales.sales_quantity
-        #     for item in product_inventory:
-        #         # print("line 546 ",item.ordered_date, "--", item.quantity, "--", item.product_stock_left )
-        #         #     print("nothing to do")
-        #         quantity_to_return -= item.quantity - item.product_stock_left
-        #         print(item.quantity - item.product_stock_left)
-        #         if quantity_to_return <= 0:
-        #             print("line552 ", quantity_to_return)
-        #             print("line553 ", sales.sales_quantity)
-        #             item.product_stock_left += sales.sales_quantity
-        #             item.save()
-        #             print("line 553 ",item.ordered_date, "--", item.quantity, "--", item.product_stock_left )
-        #             break
-        #         if quantity_to_return > 0:
-        #             item.product_stock_left = item.quantity
-        #             item.save()
-        #             print("line 558 ",item.ordered_date, "--", item.quantity, "--", item.product_stock_left )
-
-        #     # Query product inventory again different value for product name and sales date
-        #     # Prevents the User to input sales before starting Inventory
-        #     product_inventory = Product_Inventory.objects.filter(
-        #         product_name=Product.objects.get(product_name=product_name), 
-        #         ordered_date__lte=sales_date
-        #     )
-        #     for item in product_inventory:
-        #         print(item.product_stock_left)
-
-        #     sales.sales_date = sales_date
-        #     sales.product_name = Product.objects.get(product_name=product_name)
-        #     sales.sales_quantity = sales_quantity
-        #     sales.sales_unit_cost = unit_cost
-        #     sales.sales_total_cost = total_cost
-        #     sales.sales_unit_price = unit_price
-        #     sales.tax_percent = tax_percent
-            
-        #     print(sales_date)
-
-        #     # Deduct sales quantity from stock left. And Update stock left values
-        #     addSalesProcedure(product_inventory, sales_quantity)
-
-        # sales.save()
-        # inventory_transaction = InventoryTransaction.objects.get(sales_pk=Sales.objects.get(pk=id))
-        """""
+        # User did not change sales quantity. goes here
+        if quantity_diff == 0:
+            # Save changes
+            updated_sales = update_sales_obj(id, data)
+            updated_sales.save()
+            pass
+        else:
+            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
+            updateSalesProcedure(product_inventory, data)
 
         # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"})
         return JsonResponse({'message': f"Successfully updated Sales", 'variant': 'success'})

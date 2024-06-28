@@ -241,12 +241,14 @@ def create_sales_obj(requestObj):
     )
     return createSalesInstance
 
+# Updates Sales
 def update_sales_obj(id, requestObj):
     sales = get_object_or_404(Sales, pk=id)
     sales_dr = requestObj['sales_dr']
     invoice = requestObj['sales_invoice']
 
     customer = requestObj['customer']['company_name']
+    s_quantity = requestObj['sales_quantity']
     unit_cost = requestObj['unit_cost']
     total_cost = requestObj['total_cost']
     unit_price = requestObj['unit_price']
@@ -259,6 +261,7 @@ def update_sales_obj(id, requestObj):
     sales.sales_invoice = invoice
 
     sales.customer = customer
+    sales.sales_quantity = s_quantity
     sales.sales_unit_cost = unit_cost
     sales.sales_total_cost = total_cost
     sales.sales_unit_price = unit_price
