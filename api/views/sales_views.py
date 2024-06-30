@@ -158,34 +158,68 @@ class SalesPageView(APIView):
 def getSalesFilteredData(request):
 
     data = json.loads(request.body.decode('utf-8'))
-    print(data)
-    if data['productName'] is not None and data['SalesFilter'] is not None:
+    # print(data['salesInvoice'])
 
-        supplier_filter = []
-        product_filter = []
-        for item in data['productName']:
-            if(type(item) == str):
-                product_filter.append(item)
-            if(type(item) == int):
-                supplier_filter.append(item)
-
-        getYear = datetime.date.today().year
-        getEndDay = calendar.monthrange(getYear, 12)
-
-        getStartDate = str(getYear) + '-01-01'
-        getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
+    if data['SalesFilter'] is None:
+        return JsonResponse([], safe=False)
+    
+    if data['SalesFilter'] is not None:
+        query_year = data['SalesFilter']
+        getStartDate = str(query_year) + '-01-01'
+        getEndDate = str(query_year) + '-12-31'
 
         date_range = getDateRange(getStartDate, getEndDate)
+
+        # Setting filter for supplier and product
+        if data['productName'] is not None:
+            supplier_filter = []
+            product_filter = []
+            for item in data['productName']:
+                if(type(item) == str):
+                    product_filter.append(item)
+                if(type(item) == int):
+                    supplier_filter.append(item)
+
+            if len(supplier_filter) == 0 and len(product_filter) > 0:
+                product_query = ~Q(sales_transaction__supplier__company_name="") & Q(sales_transaction__product_name__product_name__in=product_filter)
+                
+            elif len(supplier_filter) > 0 and len(product_filter) == 0:
+                product_query = Q(sales_transaction__supplier__in=supplier_filter) & ~Q(sales_transaction__product_name__product_name="")
+            else:
+                # Means both supplier & productname contains filter
+                product_query = Q(sales_transaction__supplier__in=supplier_filter) | Q(sales_transaction__product_name__product_name__in=product_filter)
+
+        else:
+            # Goes here if data['productName'] is none. which is also the default query for both supplier and product
+            # it also means len(supplier_filter) == 0 and len(product_filter) == 0
+            product_query = ~Q(sales_transaction__supplier__company_name="") & ~Q(sales_transaction__product_name__product_name="")
+
+        # Setting filter for supplier and product
+        if data['customer'] is not None:
+            customer_filter = data['customer']
+            customer_query = Q(customer__company_name__in=customer_filter)
+        else:
+            customer_query = ~Q(customer__company_name="")
+
+        # Setting filter for invoice
+        if data['salesInvoice'] is None or len(data['salesInvoice']) > 1:
+            # If with or without invoice was picked goes here
+            invoice_query = ~Q(sales_invoice__sales_invoice="")
+        elif data['salesInvoice'][0] == 'Without Invoice':
+            invoice_query = Q(sales_invoice__sales_invoice__regex=r'[a-zA-Z]')
+        else:
+            # Goes here if With Invoice
+            invoice_query = ~Q(sales_invoice__sales_invoice__regex=r'[a-zA-Z]')
 
         data_list = []
         for index in date_range:
 
             sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
             sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
-            
-            sales_filtered = sales.filter(Q(sales_transaction__supplier__in=supplier_filter) | Q(sales_transaction__product_name__product_name__in=product_filter)).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
-            sales_commulative_filtered = sales_commulative.filter(Q(sales_transaction__supplier__in=supplier_filter) | Q(sales_transaction__product_name__product_name__in=product_filter))
-        
+
+            sales_filtered = sales.filter(product_query & customer_query & invoice_query).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+            sales_commulative_filtered = sales_commulative.filter(product_query & customer_query & invoice_query)
+
             sales_serializer = SalesSerializer(sales_filtered, many=True)
             new_serializer = list(sales_serializer.data)
 
@@ -200,7 +234,7 @@ def getSalesFilteredData(request):
 
         return JsonResponse(data_list, safe=False)
 
-    return JsonResponse([], safe=False)
+    return JsonResponse([], safe=False) 
 
 
 class SalesSummaryChartDataView(APIView):
