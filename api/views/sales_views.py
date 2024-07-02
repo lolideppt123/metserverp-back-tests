@@ -177,7 +177,8 @@ def getSalesFilteredData(request):
             for item in data['productName']:
                 if(type(item) == str):
                     product_filter.append(item)
-                if(type(item) == int):
+                else:
+                # if(type(item) == int):
                     supplier_filter.append(item)
 
             if len(supplier_filter) == 0 and len(product_filter) > 0:
