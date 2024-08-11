@@ -122,11 +122,13 @@ def getUnitPriceProduct(request):
     # decrease quantity -> sales difference will be 0 (value decrease by 10 value is 0)
     # increse quantity -> sales difference will be actual INCREASED value (value increased by 10 value is 10)
     try:
-        len(sales_quantity)
         curr_quantity = sales_quantity[0]['quantity']
         sales_quantity = sales_quantity[0]['sales_diff']
     except TypeError:
+        curr_quantity = None
         pass
+
+
 
     if sales_quantity == "" or sales_quantity is None: 
         sales_quantity = 0 
@@ -153,8 +155,13 @@ def getUnitPriceProduct(request):
 
     # Check if there is enough stock in inventory
     if total_product_inventory['total_inventory'] < sales_quantity:
+        if curr_quantity is None:
+            check_date = datetime.datetime.strptime(sales_date, "%Y-%m-%d")
+            date_formatted = check_date.strftime("%m/%d/%Y")
+            return JsonResponse({'label':label, 'message':f'{product_name} has {total_product_inventory["total_inventory"]} in stock. Check stock before {date_formatted}'}, status=500) 
+
         # return JsonResponse({'label':'sales_quantity', 'message':f'{product_name} has {total_product_inventory["total_inventory"]} in stock'}, status=500)
-        return JsonResponse({'label':label, 'message':f'{product_name} has only {total_product_inventory["total_inventory"]} in stock. Registed {curr_quantity}'}, status=500)
+        return JsonResponse({'label':label, 'message':f'{product_name} has only {total_product_inventory["total_inventory"]} in stock. \nRegisted {curr_quantity}'}, status=500)
 
     # EditSales Page will need to exit early.
     if index is None:
