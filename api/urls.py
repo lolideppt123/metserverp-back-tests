@@ -2,6 +2,7 @@ from django.urls import path
 from .views import *
 from .validations import *
 from django.views.decorators.csrf import csrf_exempt
+from api.views import sales_view_draft
 
 urlpatterns = [
     path('dashboard/', DashboardPageView.as_view(), name='dashboard'),
@@ -28,6 +29,7 @@ urlpatterns = [
     
     path('sales/', SalesPageView.as_view(), name='sales'),
     path('sales/<str:option>', SalesPageView.as_view(), name='sales'),
+    # path('sales/<str:option>', sales_view_draft.SalesPageViewDraft.as_view(), name='sales'),
     path('sales/transaction/<int:id>/edit', SalesPageView.as_view(), name='sales_edit'),
     path('sales/sales-summary/data-chart', SalesSummaryChartDataView.as_view(), name='sales_summary_chart'),
     path('sales/sales-summary/data-table', SalesSummaryDataTableView.as_view(), name='sales_summary_table'),

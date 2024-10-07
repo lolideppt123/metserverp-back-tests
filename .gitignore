@@ -2,3 +2,6 @@
 env/
 venv/
 Dockerfile
+docker-compose.yml
+postgres_data/
+backup/

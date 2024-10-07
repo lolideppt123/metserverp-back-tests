@@ -21,9 +21,25 @@ class SalesPageView(APIView):
     queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
     
     def get(self, request, id=None, option=None, **kwargs):
-        sales = Sales.objects.all().order_by("-sales_date", "sales_updated")
+        try:
+            getYear = int(option)
+        except:
+            getYear = datetime.date.today().year
+
+        # try:
+        #     year_str, month_str = option.split("-")
+        #     year = int(year_str)
+        #     month = int(month_str)
+        # except:
+        #     year = datetime.date.today().year
+        #     month = datetime.date.today().month
+        
+        year_sales = Sales.objects.filter(sales_date__year=getYear)
+        # month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+
         # Check if there is a sales
-        if not sales.exists():
+        if not year_sales.exists():
+        # if not month_year_sales.exists():
             return JsonResponse([],safe=False)
         if id is not None:
             sales_item = get_object_or_404(Sales, pk=id)
@@ -35,11 +51,8 @@ class SalesPageView(APIView):
 
             return JsonResponse(serialized_data, safe=False)
 
-        getYear = datetime.date.today().year
+
         getEndDay = calendar.monthrange(getYear, 12)
-        # reassign getYear if filter exists
-        if option is not None:
-            getYear = int(option)
 
         getStartDate = str(getYear) + '-01-01'
         getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
@@ -61,6 +74,31 @@ class SalesPageView(APIView):
             new_serializer.append(cumm_sales_list)
             new_serializer.append({"data_title":data_title})
             data_list.append(new_serializer)
+
+        # getEndDay = calendar.monthrange(year, month)
+        # start_date = datetime.datetime.strptime(str(year) + '-01-01', "%Y-%m-%d").date()
+        # end_date = datetime.datetime.strptime(str(year) + "-" + str(month) + "-" + str(getEndDay[1]), "%Y-%m-%d").date()
+
+        # # Get the first DAY and MONTH of the year for GTE and get the last DAY of the OPTION Month
+        # month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
+
+        # sales_serializer = SalesSerializer(month_year_sales, many=True)
+        # new_serializer = list(sales_serializer.data)
+
+        # sales_list = getSalesTotals(month_year_sales, "TOTAL_SALES") # helper.py
+        # cumm_sales_list = getSalesTotals(month_year_sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+
+        # data_title = str(year) + "-" + str(month)
+        # new_serializer.append(sales_list)
+        # new_serializer.append(cumm_sales_list)
+        # new_serializer.append({"data_title":data_title})
+        # data_list.append(new_serializer)
+        
+        products = ProductSerializer(Product.objects.all(), many=True)
+        supplier = SupplierSerializer(Supplier.objects.all(), many=True)
+        customer = CustomerSerializer(Customer.objects.all(), many=True)
+
+        api = {"products": products.data, "supplier": supplier.data, "customer": customer.data, "sales": data_list}
 
         return JsonResponse(data_list, safe=False)
 
@@ -100,7 +138,7 @@ class SalesPageView(APIView):
             # Procedure Deducts Inventory Stock, creates Sales Instance, creates InventoryHistory Instance
             addSalesProcedure(product_inventory, item['sales_quantity'], data)
             
-        return JsonResponse({"message": "Sales successfully Added."})
+        return JsonResponse({"message": "Sales successfully Added.", 'variant': 'success'})
         # return JsonResponse({"message": f"Sales successfully saved.\nInvoice: {invoice_obj} Customer: {obj.company_name} Order Date:{sales_date.strftime('%b-%d-%Y')}"})
 
     def put(self, request, id):
@@ -158,7 +196,7 @@ class SalesPageView(APIView):
 def getSalesFilteredData(request):
 
     data = json.loads(request.body.decode('utf-8'))
-    # print(data['salesInvoice'])
+    print(data)
 
     if data['SalesFilter'] is None:
         return JsonResponse([], safe=False)

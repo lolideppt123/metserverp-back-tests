@@ -155,7 +155,7 @@ class ProductsPageView(APIView):
 
         return JsonResponse({"message": f"Successfully added Product:{product_name} Unit:{product_unit} Minimum Stock:{product_min_stock}"})
 
-    def put(self, request, id):
+    def patch(self, request, id):
         product = get_object_or_404(Product, pk=id)
         data = json.loads(request.body.decode('utf-8'))
 
@@ -182,7 +182,7 @@ class ProductsPageView(APIView):
         product.product_note = product_note
         product.save()
 
-        return JsonResponse({"message": "Successfully saved changes"})
+        return JsonResponse({"message": "Successfully saved changes", 'variant': 'success'})
 
         # Postponed
         """""
@@ -323,7 +323,8 @@ class CustomerPageView(APIView):
 
         return JsonResponse({'message': f"Successfully added {company_name}", 'variant': 'success'})
     
-    def put(self, request, id):
+    def patch(self, request, id):
+        print(id)
         customer = get_object_or_404(Customer, pk=id)
         data = json.loads(request.body.decode('utf-8'))
         company_name = data['company_name']
@@ -400,7 +401,7 @@ class SupplierPageView(APIView):
 
         return JsonResponse({'message': f"Successfully added {company_name}", 'variant': 'success'})
     
-    def put(self, request, id):
+    def patch(self, request, id):
         supplier = get_object_or_404(Supplier, pk=id)
         data = json.loads(request.body.decode('utf-8'))
         company_name = data['company_name']

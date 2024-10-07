@@ -65,6 +65,7 @@ class SupplierAdmin(admin.ModelAdmin):
     list_display = ["company_name", "pk", "contact_person", "contact_number", "company_address"]
 
 class SalesAdmin(admin.ModelAdmin):
+    search_fields = ["product_name__product_name", "customer__company_name"]
     list_display = [
         "pk",
         # "get_supplier",

@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'api',
     'authentication',
     'storages', #AWS S3 boto3
-    'rest_framework_simplejwt.token_blacklist', # blacklist token 
+    'rest_framework_simplejwt.token_blacklist', # blacklist token
 ]
 
 REST_FRAMEWORK = {
@@ -57,6 +57,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     # "EXCEPTION_HANDLER": 'authentication.views.custom_exception_handler',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
 }
 
 # SIMPLE JWT CUSTOMIZATION OF TOKEN
@@ -206,6 +208,8 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
 ]
 # CORS_ALLOW_ALL_ORIGINS = True
 
@@ -233,3 +237,6 @@ AWS_S3_FILE_OVERWRITE = True
 AWS_DEFAULT_ACL = None
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
+
+DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
+DBBACKUP_STORAGE_OPTIONS = {'location': BASE_DIR/'backup'}

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import *
+from .custom_serializer import *
 
 class MaterialsSerializer(serializers.ModelSerializer):
     material_unit_name = serializers.CharField(source='material_unit.unit_name')
@@ -38,6 +39,7 @@ class ProductSerializer(serializers.ModelSerializer):
 class RawMaterials_ProductSerializer(serializers.ModelSerializer):
     product = serializers.CharField(source='product.product_name')
     product_unit = serializers.CharField(source='product.product_unit.unit_name')
+    product_unit_abbv = serializers.CharField(source='product.product_unit.unit_abbv')
     product_min_stock = serializers.CharField(source='product.product_min_stock')
     product_note = serializers.CharField(source='product.product_note')
     product_type = serializers.CharField(source='product.product_type')
@@ -48,7 +50,8 @@ class RawMaterials_ProductSerializer(serializers.ModelSerializer):
         model = RawMaterials_Product
         fields = (
             'product', 
-            'product_unit', 
+            'product_unit',
+            'product_unit_abbv',
             'product_min_stock', 
             'product_note', 
             'material', 
@@ -112,6 +115,7 @@ class SalesSerializer(serializers.ModelSerializer):
     sales_status = serializers.CharField(source='sales_invoice.invoice_status', allow_null=True)
     sales_paid_date = serializers.CharField(source='sales_invoice.invoice_paid_date', allow_null=True)
     sales_date = serializers.DateField(format="%Y-%m-%d")
+    sales_transaction = CustomProductInventorySerializer(many=True)
 
     class Meta:
         model = Sales
@@ -136,9 +140,9 @@ class SalesSerializer(serializers.ModelSerializer):
             'sales_status',
             'sales_note',
             'sales_paid_date',
-            'sales_transaction'
+            'sales_transaction',
         )
-        depth = 2 # https://testdriven.io/blog/drf-serializers/
+        # depth = 2 # https://testdriven.io/blog/drf-serializers/
 
 class SalesInvoiceSerializer(serializers.ModelSerializer):
     invoice_paid_date = serializers.DateTimeField(format="%Y-%m-%d")
@@ -160,7 +164,6 @@ class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = '__all__'
-
         
 class UnitSerializer(serializers.ModelSerializer):
     unit_category = serializers.CharField(source='unit_category.unit_category')

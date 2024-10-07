@@ -49,6 +49,7 @@ class RawMaterialsInventoryPageView(APIView):
                 order_update = material_inventory[len(material_inventory)-1].order_update # Get the last update date
 
                 data_set = {'material_name': material.material_name}
+                data_set.update({'pk': material.pk})
                 data_set.update(material_stock_left)
                 data_set.update({"material_unit" : material_unit})
                 data_set.update({'last_ordered_date': last_ordered_date})
