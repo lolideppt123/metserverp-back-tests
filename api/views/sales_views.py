@@ -15,32 +15,27 @@ from rest_framework import permissions
 from rest_framework.decorators import permission_classes, api_view
 import calendar
 
+import time
+
 
 class SalesPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
     
     def get(self, request, id=None, option=None, **kwargs):
-        try:
-            getYear = int(option)
-        except:
-            getYear = datetime.date.today().year
+        start_time = time.time()
 
-        # try:
-        #     year_str, month_str = option.split("-")
-        #     year = int(year_str)
-        #     month = int(month_str)
-        # except:
-        #     year = datetime.date.today().year
-        #     month = datetime.date.today().month
-        
-        year_sales = Sales.objects.filter(sales_date__year=getYear)
-        # month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+        ###############
+        # This block is newly added
+        if id is None and option is None:
+            # Returns all sales if no year and id supplied
+            sales = Sales.objects.all()
+            sales_serializer = SalesSerializer(sales, many=True)
+            return JsonResponse(sales_serializer.data, safe=False)
+        ################
 
-        # Check if there is a sales
-        if not year_sales.exists():
-        # if not month_year_sales.exists():
-            return JsonResponse([],safe=False)
+        # Moved
+        # If id is supplied return early
         if id is not None:
             sales_item = get_object_or_404(Sales, pk=id)
             sales_serialized = SalesSerializer(sales_item)
@@ -52,55 +47,85 @@ class SalesPageView(APIView):
             return JsonResponse(serialized_data, safe=False)
 
 
-        getEndDay = calendar.monthrange(getYear, 12)
+        try:
+            year_str, month_str = option.split("-")
+            year = int(year_str)
+            # month = int(month_str)
+            month = 10
+        except:
+            year = datetime.date.today().year
+            month = datetime.date.today().month
+        
+        # year_sales = Sales.objects.filter(sales_date__year=getYear)
+        month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
 
-        getStartDate = str(getYear) + '-01-01'
-        getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
+        # Check if there is a sales
+        # if not year_sales.exists():
+        if not month_year_sales.exists():
+            return JsonResponse([],safe=False)
 
-        date_range = getDateRange(getStartDate, getEndDate)
-        data_list = []
-        for index in date_range:
-            sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
-            sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
 
-            sales_serializer = SalesSerializer(sales, many=True)
-            new_serializer = list(sales_serializer.data)
+        # getEndDay = calendar.monthrange(getYear, 12)
 
-            sales_list = getSalesTotals(sales, "TOTAL_SALES") # helper.py
-            cumm_sales_list = getSalesTotals(sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+        # getStartDate = str(getYear) + '-01-01'
+        # getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
 
-            data_title = str(index[0].year) + "-" + str(index[0].month)
-            new_serializer.append(sales_list)
-            new_serializer.append(cumm_sales_list)
-            new_serializer.append({"data_title":data_title})
-            data_list.append(new_serializer)
+        # date_range = getDateRange(getStartDate, getEndDate)
+        # data_list = []
+        # for index in date_range:
+        #     sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+        #     sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
 
-        # getEndDay = calendar.monthrange(year, month)
-        # start_date = datetime.datetime.strptime(str(year) + '-01-01', "%Y-%m-%d").date()
-        # end_date = datetime.datetime.strptime(str(year) + "-" + str(month) + "-" + str(getEndDay[1]), "%Y-%m-%d").date()
+        #     sales_serializer = SalesSerializer(sales, many=True)
+        #     new_serializer = list(sales_serializer.data)
 
-        # # Get the first DAY and MONTH of the year for GTE and get the last DAY of the OPTION Month
-        # month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
+        #     sales_list = getSalesTotals(sales, "TOTAL_SALES") # helper.py
+        #     cumm_sales_list = getSalesTotals(sales_commulative, "CUMM_TOTAL_SALES") # helper.py
 
-        # sales_serializer = SalesSerializer(month_year_sales, many=True)
-        # new_serializer = list(sales_serializer.data)
+        #     data_title = str(index[0].year) + "-" + str(index[0].month)
+        #     new_serializer.append(sales_list)
+        #     new_serializer.append(cumm_sales_list)
+        #     new_serializer.append({"data_title":data_title})
+        #     data_list.append(new_serializer)
 
-        # sales_list = getSalesTotals(month_year_sales, "TOTAL_SALES") # helper.py
-        # cumm_sales_list = getSalesTotals(month_year_sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+        getEndDay = calendar.monthrange(year, month)
+        start_date = datetime.datetime.strptime(str(year) + '-01-01', "%Y-%m-%d").date()
+        end_date = datetime.datetime.strptime(str(year) + "-" + str(month) + "-" + str(getEndDay[1]), "%Y-%m-%d").date()
 
-        # data_title = str(year) + "-" + str(month)
-        # new_serializer.append(sales_list)
-        # new_serializer.append(cumm_sales_list)
-        # new_serializer.append({"data_title":data_title})
-        # data_list.append(new_serializer)
+        # Get the first DAY and MONTH of the year for GTE and get the last DAY of the OPTION Month
+        month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
+
+        sales_serializer = SalesSerializer(month_year_sales, many=True)
+
+        # Compute sales totals & cummulative
+        sales_list = getSalesTotals(month_year_sales, "TOTAL_SALES") # helper.py
+        cumm_sales_list = getSalesTotals(month_year_sales_commulative, "CUMM_TOTAL_SALES") # helper.py
+        data_title = str(year) + "-" + str(month)
+
+        sales_data = {
+            "sales_list": sales_serializer.data,
+            "sales_totals": sales_list,
+            "sales_cummulative": cumm_sales_list
+        }
         
         products = ProductSerializer(Product.objects.all(), many=True)
         supplier = SupplierSerializer(Supplier.objects.all(), many=True)
         customer = CustomerSerializer(Customer.objects.all(), many=True)
 
-        api = {"products": products.data, "supplier": supplier.data, "customer": customer.data, "sales": data_list}
+        api = {
+            "products": products.data, 
+            "supplier": supplier.data, 
+            "customer": customer.data, 
+            "sales": sales_data,
+            "data_title": data_title
+        }
 
-        return JsonResponse(data_list, safe=False)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"Execution time: {execution_time:.2f} seconds")
+
+        return JsonResponse(api, safe=False)
+        # return JsonResponse(data_list, safe=False)
 
     def post(self, request):
         data = json.loads(request.body.decode('utf-8'))
@@ -112,6 +137,9 @@ class SalesPageView(APIView):
         
         if sales_invoice == '':
             sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
+        elif sales_invoice.lower():
+            sales_invoice = f'sample-{sales_date}-' + str(uuid.uuid4())
+
         invoice_obj = SalesInvoice.objects.create(sales_invoice=sales_invoice, invoice_date=sales_date, invoice_note=data['sales_note'])
         customer_obj, create = Customer.objects.get_or_create(company_name=customer)
 
