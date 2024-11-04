@@ -73,7 +73,7 @@ class SalesPageViewDraft(APIView):
             year = datetime.date.today().year
             month = datetime.date.today().month
 
-        print("line 76 still here")
+
         # Setting filter Query for supplier and product default is []
         if product_supplier_filter is not None and len(product_supplier_filter) > 0:
             supplier_filter = []
