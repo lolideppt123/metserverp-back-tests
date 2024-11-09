@@ -458,6 +458,7 @@ class InventoryHistoryPageView(APIView):
                 data_set.update({"type": "sales"})
                 data_set.update({"id": item.sales_pk.pk}) # pk of sales
                 data_set.update({"pk": item.pk})  # pk of prod_inv_trans
+                data_set.update({"hotodg": "sjdgbkjsdfsjdfjksdjkfbsdjkfbsjdf"})
                 data_list.append(data_set)
                     
 

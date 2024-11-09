@@ -5,3 +5,4 @@ Dockerfile
 docker-compose.yml
 postgres_data/
 backup/
+.DS_Store

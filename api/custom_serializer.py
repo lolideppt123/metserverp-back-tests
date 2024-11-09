@@ -12,6 +12,23 @@ class CustomProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = ['product_name']
 
+class CustomSalesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
+        fields = []
+
+class CustomInvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesInvoice
+        fields = ['sales_invoice', 'invoice_status']
+
+# For Inventory Transaction Serializer
+class CustomSalesTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
+        fields = ['']
+
+# For Sales Serializer
 class CustomProductInventorySerializer(serializers.ModelSerializer):
     supplier = CustomSupplierSerializer()
     product_name = CustomProductSerializer()
