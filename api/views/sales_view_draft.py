@@ -1,10 +1,10 @@
-from django.http import Http404, JsonResponse
+from django.http import JsonResponse
 from api.models import *
 from api.serializer import *
 from api.validations import *
 from api.helper import *
 from api.procedure import *
-from django.db.models import Sum, Q, F, DecimalField, FloatField
+from django.db.models import Sum, Q
 from django.db.models.deletion import ProtectedError
 import uuid
 import json
@@ -15,24 +15,13 @@ from rest_framework import permissions
 from rest_framework.decorators import permission_classes, api_view
 import calendar
 
-from django.db.models.functions import TruncMonth
-from django.db.models.expressions import ExpressionWrapper
-from django.db.models import Func
-
-# from rest_framework.pagination import PageNumberPagination
-# from rest_framework.response import Response
-
 import time
 
-class Round(Func):
-    function = 'ROUND'
-    arity = 2
 
-class SalesPageViewDraft(APIView):
+class SalesPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
-
-
+    
     def get(self, request, id=None, **kwargs):
         start_time = time.time()
 
@@ -74,8 +63,8 @@ class SalesPageViewDraft(APIView):
             }
 
             return JsonResponse(api, safe=False)
-        
 
+        # build date filter
         try:
             year_str, month_str = date_filter.split("-")
             year = int(year_str)
@@ -94,10 +83,10 @@ class SalesPageViewDraft(APIView):
             # Seperates product and suppliers filter
             for item in product_supplier_filter:
                 if isinstance(item, str):
-                    print("this is str", item)
+                    # print("this is str", item)
                     product_filter.append(item)
                 elif isinstance(item, int):
-                    print("this is int", item)
+                    # print("this is int", item)
                     supplier_filter.append(item)
 
             # Build the product query based on the presence of filters
@@ -151,7 +140,7 @@ class SalesPageViewDraft(APIView):
 
         
         combined_filter_query = product_query & customer_query & invoice_query
-
+        
         # This query will return all sales from YEAR-MONTH-01 to YEAR-MONTH-31/30/29/28
         month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month)
         filtered_monthly_year_sales = month_year_sales.filter(
@@ -166,7 +155,6 @@ class SalesPageViewDraft(APIView):
 
         # Declare here incase we need to return early
         data_title = str(year) + "-" + str(month)
-
 
         # Check if there is a sales
         if not filtered_monthly_year_sales.exists():
@@ -184,21 +172,23 @@ class SalesPageViewDraft(APIView):
             }
             return JsonResponse(api, safe=False)
         
-
         sales_serializer = SalesSerializer(filtered_monthly_year_sales, many=True)
         filtered_serialized_data = sales_serializer.data
         # Done with the list of sales that's been filtered.
+
 
         getEndDay = calendar.monthrange(year, month)
         start_date = datetime.datetime.strptime(str(year) + '-01-01', "%Y-%m-%d").date()
         end_date = datetime.datetime.strptime(str(year) + "-" + str(month) + "-" + str(getEndDay[1]), "%Y-%m-%d").date()
 
-        # Get the first DAY and MONTH of the year for GTE and get the last DAY of the supplied Month
+
+        # Get the first DAY and MONTH of the year for GTE and get ONLY the LAST DAY of the SUPPLIED MONTH. 
+        # 
+        # LAST DAY of the SUPPLIED MONTH vs LAST DAY of the YEAR will result in a different cummulative totals
         month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
         filtered_monthly_year_sales_commulative = month_year_sales_commulative.filter(
             combined_filter_query
         )
-        
 
         # Compute sales totals & cummulative
         sales_totals = getSalesTotals(filtered_monthly_year_sales, "TOTAL_SALES") # helper.py
@@ -225,11 +215,142 @@ class SalesPageViewDraft(APIView):
         return JsonResponse(api, safe=False)
         # return JsonResponse(data_list, safe=False)
 
+    def post(self, request):
+        data = json.loads(request.body.decode('utf-8'))
+        sales_invoice = data['sales_invoice']
+        sales_date = datetime.datetime.strptime(data['sales_date'], "%Y-%m-%d").date()
+        customer = data['customer']['company_name']
 
+        products = data['products']
+        
+        if sales_invoice == '':
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
+        elif sales_invoice.lower():
+            sales_invoice = f'sample-{sales_date}-' + str(uuid.uuid4())
+
+        invoice_obj = SalesInvoice.objects.create(sales_invoice=sales_invoice, invoice_date=sales_date, invoice_note=data['sales_note'])
+        customer_obj, create = Customer.objects.get_or_create(company_name=customer)
+
+        # reassign values back as validated data
+        data['sales_invoice'] = invoice_obj
+        data['customer']['company_name'] = customer_obj
+
+        # Loop throught number of products
+        # Create sales in every loop
+        for index, item in enumerate(products):
+            addSalesValidation(item['product'], customer)
+            data['product_name'] = item['product']
+            data['quantity'] = item['sales_quantity']
+            data['ucost'] = item['unit_cost']
+            data['tcost'] = item['total_cost']
+            data['uprice'] = item['unit_price']
+            # Check if product name has stock                                           (Checked in getUnitPriceProduct)
+            # Check if product has enought stock                                        (Checked in getUnitPriceProduct)
+            # Prevents the User to input sales before starting Inventory                (Checked in getUnitPriceProduct)
+
+            # Query inventory less than or equal sales date
+            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=item['product']), ordered_date__lte=sales_date)
+
+            # Procedure Deducts Inventory Stock, creates Sales Instance, creates InventoryHistory Instance
+            addSalesProcedure(product_inventory, item['sales_quantity'], data)
+            
+        return JsonResponse({"message": "Sales successfully Added.", 'variant': 'success'})
+        # return JsonResponse({"message": f"Sales successfully saved.\nInvoice: {invoice_obj} Customer: {obj.company_name} Order Date:{sales_date.strftime('%b-%d-%Y')}"})
+
+    def put(self, request, id):
+        data = json.loads(request.body.decode('utf-8'))
+        sales_date = datetime.datetime.strptime(data['sales_date'], "%Y-%m-%d").date()
+        sales_invoice = data['sales_invoice']
+        customer = data['customer']['company_name']
+
+        product_name = data['product_name']
+        quantity_diff = data['quantity_diff']
+
+        # Allows the user to insert Sales into an invoice
+        if sales_invoice == '':
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
+        invoice_obj, created = SalesInvoice.objects.get_or_create(sales_invoice=sales_invoice, invoice_date=sales_date)
+        cust_obj = get_object_or_404(Customer, company_name=customer)
+
+        # reassign values back as validated data
+        data['sales_invoice'] = invoice_obj
+        data['customer']['company_name'] = cust_obj
+
+
+        # User did not change sales quantity. goes here
+        if quantity_diff == 0:
+            # Save changes
+            updated_sales = update_sales_obj(id, data)
+            updated_sales.save()
+            pass
+        else:
+            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
+            print(data)
+            updateSalesProcedure(product_inventory, data)
+
+        # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"})
+        return JsonResponse({'message': f"Successfully updated Sales", 'variant': 'success'})
+    
+    def patch(self, request, id):
+        print("patch triggered")
+        data = json.loads(request.body.decode('utf-8'))
+        sales_date = datetime.datetime.strptime(data['sales_date'], "%Y-%m-%d").date()
+        sales_invoice = data['sales_invoice']
+        customer = data['customer']['company_name']
+
+        product_name = data['product_name']
+        quantity_diff = data['quantity_diff']
+
+        # Allows the user to insert Sales into an invoice
+        if sales_invoice == '':
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
+        invoice_obj, created = SalesInvoice.objects.get_or_create(sales_invoice=sales_invoice, invoice_date=sales_date)
+        cust_obj = get_object_or_404(Customer, company_name=customer)
+
+        # reassign values back as validated data
+        data['sales_invoice'] = invoice_obj
+        data['customer']['company_name'] = cust_obj
+
+
+        # User did not change sales quantity. goes here
+        if quantity_diff == 0:
+            # Save changes
+            updated_sales = update_sales_obj(id, data)
+            updated_sales.save()
+            pass
+        else:
+            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
+            print(data)
+            updateSalesProcedure(product_inventory, data)
+
+        # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"})
+        return JsonResponse({'message': f"Successfully updated Sales", 'variant': 'success'})
+
+    
+    def delete(self, request, id):
+        sales = get_object_or_404(Sales, pk=id)
+        item_inventory_transaction = get_object_or_404(InventoryTransaction, sales_pk=id)
+        add_quantity = abs(item_inventory_transaction.p_quantity)
+        product_inventory = get_object_or_404(Product_Inventory, pk=item_inventory_transaction.inventory_pk.pk)
+
+        try:
+            product_inventory.product_stock_left += add_quantity
+            product_inventory.save()
+            item_inventory_transaction.delete()
+            sales.delete()
+
+            product_pk = product_inventory.product_name.pk
+        except ProtectedError:
+            return JsonResponse({"message": f"Delete action failed. {sales.product_name} already has linked records."}, status=404)
+        return JsonResponse({
+            "product_pk": product_pk, # returns back product_pk to be used in salesApiSLice tag invalidation
+            "message": f"Invoice#: {sales.sales_invoice} {sales.product_name} has successfully deleted.",
+        })
+    
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def DraftgetSalesFilteredData(request):
+def getSalesFilteredData(request):
 
     data = json.loads(request.body.decode('utf-8'))
     print(data)
@@ -279,7 +400,7 @@ def DraftgetSalesFilteredData(request):
         # Setting filter for invoice
         if data['salesInvoice'] is None or len(data['salesInvoice']) > 1:
             # If with or without invoice was picked goes here
-            invoice_query = Q()
+            invoice_query = ~Q(sales_invoice__sales_invoice="")
         elif data['salesInvoice'][0] == 'Without Invoice':
             invoice_query = Q(sales_invoice__sales_invoice__regex=r'[a-zA-Z]')
         else:
@@ -310,3 +431,214 @@ def DraftgetSalesFilteredData(request):
         return JsonResponse(data_list, safe=False)
 
     return JsonResponse([], safe=False) 
+
+
+class SalesSummaryChartDataView(APIView):
+    permission_classes = (permissions.DjangoModelPermissions,)
+    queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
+
+    def get(self, request):
+        pass
+    def post(self, request):
+        data = json.loads(request.body.decode('utf-8'))
+        start_date = data['start']
+        end_date = data['end']
+        query = data['query']
+        # print(start_date, "--", end_date)
+        
+        date_range = getDateRange(start_date, end_date)
+
+        if query == "ALL":
+            data_list = []
+            for index in date_range:
+                sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1])
+
+                if sales.exists():
+                    total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
+                    total_sales_price = sumOfSales(sales, 'sales_gross_price')
+                    total_sales_margin = sumOfSales(sales, 'sales_margin')
+
+                    # From string to Float
+                    sales_cost = float(*total_sales_cost.values())
+                    sales_price = float(*total_sales_price.values())
+                    sales_margin = float(*total_sales_margin.values())
+
+                    data_set = ({"start_date": index[0].strftime("%b %d %Y")})
+                    data_set.update({"end_date": index[1].strftime("%b %d %Y")})
+                    data_set.update({"date_label": index[0].strftime("%b %Y")})
+                    data_set.update({"sales_cost":sales_cost})
+                    data_set.update({"sales_price":sales_price})
+                    data_set.update({"sales_margin":sales_margin})
+                    data_list.append(data_set)
+                else:
+                    # When no record shows set items to 0
+                    data_set = ({"start_date": index[0].strftime("%b %d %Y")})
+                    data_set.update({"end_date": index[1].strftime("%b %d %Y")})
+                    data_set.update({"date_label": index[0].strftime("%b %Y")})
+                    data_set.update({"sales_cost":0})
+                    data_set.update({"sales_price":0})
+                    data_set.update({"sales_margin":0})
+                    data_list.append(data_set)
+
+            return JsonResponse(data_list, safe=False)
+        
+        if query == "PRODUCTS":
+            data_sorted = []
+            data_list = []
+            for index in date_range:
+                query_list = []
+                for product in Product.objects.all():
+                    sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1], product_name=product.pk)
+
+                    if sales.exists():
+                        total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
+                        total_sales_price = sumOfSales(sales, 'sales_gross_price')
+                        total_sales_margin = sumOfSales(sales, 'sales_margin')
+
+                        # From string to Float
+                        sales_cost = float(*total_sales_cost.values())
+                        sales_price = float(*total_sales_price.values())
+                        sales_margin = float(*total_sales_margin.values())
+
+                        data_set = ({'product': product.product_name})
+                        data_set.update({"sales_margin":sales_margin})
+                        query_list.append(data_set)
+                    else:
+                        data_set = ({'product': product.product_name})
+                        data_set.update({"sales_margin":0})
+                        query_list.append(data_set)
+                # Sort query_list from highest to lowest using sales_margin. then return only from 0 upto 3 index 
+                data_sorted = sorted(query_list, key=lambda item : item['sales_margin'], reverse=True)[0:3]
+
+                new_data_set = ({"date_label": index[0].strftime("%b %Y")})
+                new_data_set.update({"start_date": index[0].strftime("%b %d %Y")})
+                new_data_set.update({"end_date": index[1].strftime("%b %d %Y")})
+
+                for index, item in enumerate(data_sorted):
+                    new_data_set.update({f"rank_{index}": item['product']})
+                    new_data_set.update({f"rank_{index}_margin": item['sales_margin']})
+
+                data_list.append(new_data_set)
+
+            return JsonResponse(data_list, safe=False)
+
+        if query == "CUSTOMERS":
+            data_sorted = []
+            data_list = []
+            for index in date_range:
+                query_list = []
+                for customer in Customer.objects.all():
+                    sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1], customer=customer.pk)
+
+                    if sales.exists():
+                        total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
+                        total_sales_price = sumOfSales(sales, 'sales_gross_price')
+                        total_sales_margin = sumOfSales(sales, 'sales_margin')
+
+                        # From string to Float
+                        sales_cost = float(*total_sales_cost.values())
+                        sales_price = float(*total_sales_price.values())
+                        sales_margin = float(*total_sales_margin.values())
+
+                        data_set = ({'customer': customer.company_name})
+                        data_set.update({"sales_margin":sales_margin})
+                        query_list.append(data_set)
+                    else:
+                        data_set = ({'customer': customer.company_name})
+                        data_set.update({"sales_margin":0})
+                        query_list.append(data_set)
+                # Sort query_list from highest to lowest using sales_margin. then return only from 0 upto 3 index 
+                data_sorted = sorted(query_list, key=lambda item : item['sales_margin'], reverse=True)[0:3]
+
+                new_data_set = ({"date_label": index[0].strftime("%b %Y")})
+                new_data_set.update({"start_date": index[0].strftime("%b %d %Y")})
+                new_data_set.update({"end_date": index[1].strftime("%b %d %Y")})
+
+                for index, item in enumerate(data_sorted):
+                    new_data_set.update({f"rank_{index}": item['customer']})
+                    new_data_set.update({f"rank_{index}_margin": item['sales_margin']})
+
+                data_list.append(new_data_set)
+
+            return JsonResponse(data_list, safe=False)
+        return JsonResponse({"data": "data"}, safe=False)
+    
+
+class SalesSummaryDataTableView(APIView):
+    permission_classes = (permissions.DjangoModelPermissions,)
+    queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
+
+    def post(self, request):
+        data = json.loads(request.body.decode('utf-8'))
+        start_date = data['start']
+        end_date = data['end']
+        query = data['query']
+
+        if not query == "CUSTOMERS":
+            data_list = []
+            for product in Product.objects.all():
+                sales = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date, product_name=product)
+
+                total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
+                total_sales_gross = sumOfSales(sales, 'sales_gross_price')
+                total_sales_margin = sumOfSales(sales, 'sales_margin')
+
+                if total_sales_cost['total_cost'] is None:
+                    total_sales_cost['total_cost'] = 0
+
+                sales_cost = float(*total_sales_cost.values())
+                sales_gross = float(*total_sales_gross.values())
+                sales_margin = float(*total_sales_margin.values())
+                try:
+                    profit_margin = ((sales_gross - sales_cost) / sales_gross) * 100
+                except ZeroDivisionError:
+                    profit_margin = 0
+
+                data_set = ({'product': product.product_name})
+                data_set.update({"sales_cost":sales_cost})
+                data_set.update({"sales_gross":sales_gross})
+                data_set.update({"sales_margin":sales_margin})
+                data_set.update({"profit_margin":profit_margin})
+                data_set.update({"pk":product.pk})
+                data_list.append(data_set)
+                
+            data_sorted = sorted(data_list, key=lambda item : item['sales_margin'], reverse=True)
+
+        if query == 'CUSTOMERS':
+            data_list = []
+            for customer in Customer.objects.all():
+                sales = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date, customer=customer)
+
+                total_sales_cost = sales.aggregate(total_cost=Sum('sales_total_cost'))
+                total_sales_gross = sumOfSales(sales, 'sales_gross_price')
+                total_sales_margin = sumOfSales(sales, 'sales_margin')
+                
+                if total_sales_cost['total_cost'] is None:
+                    total_sales_cost['total_cost'] = 0
+
+                sales_cost = float(*total_sales_cost.values())
+                sales_gross = float(*total_sales_gross.values())
+                sales_margin = float(*total_sales_margin.values())
+                try:
+                    profit_margin = ((sales_gross - sales_cost) / sales_gross) * 100
+                except ZeroDivisionError:
+                    profit_margin = 0
+
+                data_set = ({'customer': customer.company_name})
+                data_set.update({"sales_cost":sales_cost})
+                data_set.update({"sales_gross":sales_gross})
+                data_set.update({"sales_margin":sales_margin})
+                data_set.update({"profit_margin":profit_margin})
+                data_set.update({"pk":customer.pk})
+                data_list.append(data_set)
+
+            data_sorted = sorted(data_list, key=lambda item : item['sales_margin'], reverse=True)
+
+        sales_query = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
+        sales_totals = getSalesTotals(sales_query, "CUMM_TOTAL_SALES")
+        print(sales_totals)
+        data_sorted.append(sales_totals)
+
+        return JsonResponse(data_sorted, safe=False)
+
+
