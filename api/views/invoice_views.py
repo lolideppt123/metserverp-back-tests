@@ -76,7 +76,7 @@ class SalesInvoicePageView(APIView):
             # print(sales)
         # print(invoice_list)
         return JsonResponse(data_list, safe=False)
-        pass
+
     def post(self, request):
         pass
 
@@ -90,15 +90,19 @@ class SalesInvoicePageView(APIView):
         
         invoice_item.invoice_paid_date = data['pay_date']
         invoice_item.save()
-        return JsonResponse({"message": f"Invoice#: {invoice_item.sales_invoice} successfully updated."}, safe=False)
+        invoice = (invoice_item.sales_invoice[:8] + '..') if len(invoice_item.sales_invoice) > 8 else invoice_item.sales_invoice
+        return JsonResponse({"message": f"Invoice#: {invoice} successfully updated."}, safe=False)
 
     def delete(self, request, id):
         invoice_item = get_object_or_404(SalesInvoice, pk=id)
+
+        invoice = (invoice_item.sales_invoice[:8] + '..') if len(invoice_item.sales_invoice) > 8 else invoice_item.sales_invoice
+
         try:
             invoice_item.delete()
         except ProtectedError:
             return JsonResponse({"message": f"Delete action failed. Invoice# {invoice_item.sales_invoice} already has linked records."}, status=404)
-        return JsonResponse({"message": f"Invoice#: {invoice_item.sales_invoice} has successfully deleted."})
+        return JsonResponse({"message": f"Invoice: {invoice} has successfully deleted."})
 
     
 @api_view(['POST'])

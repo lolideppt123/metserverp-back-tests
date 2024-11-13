@@ -13,11 +13,12 @@ import uuid
 import json
 import datetime
 from django.shortcuts import get_object_or_404
-from dateutil.relativedelta import relativedelta
 from rest_framework.views import APIView
 from rest_framework import permissions
 from rest_framework.decorators import permission_classes, api_view
-import calendar
+from rest_framework.response import Response
+from datetime import date
+
 
 class RawMaterialsInventoryPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
@@ -70,9 +71,77 @@ class RawMaterialsInventoryPageView(APIView):
                         data_set.update({'stock_left': 0})
                 material_inventory_data.append(data_set)
 
-        # print(material_inventory_data)
-        # return JsonResponse({"data": "data"}, safe=False)
+
         return JsonResponse(material_inventory_data, safe=False)
+    
+    def get_single_material_inventory(self, id):
+        """Fetch a single material inventory and return serialized data."""
+        material_inventory_item = get_object_or_404(RawMaterials_Inventory, pk=id)
+        material_inventory_serializer = RawMaterialsInventorySerializer(material_inventory_item)
+
+        # Manually injecting supplier data
+        supplier = get_object_or_404(Supplier, pk=material_inventory_serializer.data['supplier']['id'])
+        serialized_data = material_inventory_serializer.data
+        serialized_data['supplier'] = {
+            "id": supplier.pk,
+            "company_name": supplier.company_name
+        }
+
+        return Response(serialized_data)
+
+    def get_all_material_inventory(self):
+        """Fetch and aggregate all material inventories, optimizing database queries."""
+        materials = RawMaterials.objects.all()
+
+        if not materials.exists():
+            return Response([], safe=False)
+        
+        material_inventory_data = []
+        for material in materials:
+            # Using select_related and prefetch_related to minimize database hits
+            material_inventory = RawMaterials_Inventory.objects.filter(
+                material_name=material.pk
+            ).select_related(
+                'supplier', 
+                'material_name'
+            )
+            material_unit = Unit.objects.get(unit_name=material.material_unit).unit_name
+
+            # Check if material inventory exists and process
+            if material_inventory.exists():
+                # Aggregate stock left and price
+                material_stock_left = material_inventory.aggregate(total_inventory=Sum('material_stock_left'))
+                width, color = productInventoryStatus(material.material_min_stock, *material_stock_left.values())
+
+                last_ordered_date = material_inventory.last().ordered_date
+                order_update = material_inventory.last().order_update
+
+                # Initialize dataset with material details
+                data_set = {
+                    'material_name': material.material_name,
+                    'pk': material.pk,
+                    'material_unit': material_unit,
+                    'last_ordered_date': last_ordered_date,
+                    'order_update': order_update
+                }
+
+                data_set.update(material_stock_left)
+                data_set.update(width)
+                data_set.update(color)
+
+                # Get price and stock left of the first inventory item
+                first_item = material_inventory.first()
+                if first_item.material_stock_left > 0:
+                    data_set.update({
+                        'unit_price': first_item.material_cost,
+                        'stock_left': first_item.material_stock_left
+                    })
+                else:
+                    data_set.update({'unit_price': 0, 'stock_left': 0})
+
+                material_inventory_data.append(data_set)
+                
+        return Response(material_inventory_data, safe=False)
 
     def post(self, request):
         data = json.loads(request.body.decode('utf-8'))
@@ -173,12 +242,74 @@ class RawMaterialsInventoryPageView(APIView):
                 sale.sales_pk.save()
             # END INVENTORY COST CHANGE, UPDATE SALES COST
 
-            
-        
-
-
         # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"}, status=404)
         return JsonResponse({'message': f"Successfully updated {message} {material_name}", 'variant': 'success'}, safe=False)
+
+    def patch(self, request, id):
+        data = json.loads(request.body.decode('utf-8'))
+        material_inventory_item = get_object_or_404(RawMaterials_Inventory, pk=id)
+        material_name = get_object_or_404(RawMaterials, material_name=material_inventory_item.material_name)
+
+        # print(">>>", material_inventory_item)
+        # print(material_inventory_item.material_cost, " -->> ", data['price_per_unit'])
+        # print(material_inventory_item.material_total_cost, " -->> ", data['total_cost'])
+        # print("-------------------")
+
+        message = costChangeMessage(material_inventory_item, "material_cost", data['price_per_unit'])
+
+        
+        # Need to update Change in Material Inventory first.
+        # Computations below are based on Material Inventory already changed.
+        material_inventory_item.material_cost = Decimal(data['price_per_unit'])
+        material_inventory_item.material_total_cost = Decimal(data['total_cost'])
+        material_inventory_item.save()
+
+        # START MATERIAL COST CHANGE UPDATE INVENTORY COST
+        # Get the material_inv that changed price using material_inv.pk
+        # Get only material_inv.pk that has product_inv.pk (Meaning get mat_inv transactions that already created a product inventory)
+        material_inventory_trans = RawMaterials_InventoryTransaction.objects.filter(~Q(product_inventory_pk=None), materials_inventory_pk=material_inventory_item)
+        for item in material_inventory_trans:
+
+            # each ITEM allows me to get the product_inventory PK
+            get_product_inventory = get_object_or_404(Product_Inventory, pk=item.product_inventory_pk.pk)
+            # print(get_product_inventory)
+
+            # After getting each Product_Inventory PK. Query RawMaterials_InventoryTransaction again as prod_inv_pk.
+            # calculate new Product_Inventory TOTAL COST using RawMaterials_InventoryTransaction QUANTITY and U/PRICE
+            materials_trans = RawMaterials_InventoryTransaction.objects.filter(product_inventory_pk=get_product_inventory.pk)
+            # After getting each Product_Inventory PK. Query InventoryTransaction again as prod_inv_pk.
+            # calculate new Sales TOTAL COST using InventoryTransaction QUANTITY and U/PRICE
+            inventory_trans = InventoryTransaction.objects.filter(~Q(sales_pk=None), inventory_pk=get_product_inventory.pk)
+            # print(inventory_trans)
+
+            new_inv_cost = 0
+            for mat in materials_trans:
+                # Get the updated Material_Inventory.material_cost that was updated above "material_inventory_item.save()"
+                # This code below is only used to compute for NEW TCOST
+                new_inv_cost += mat.materials_inventory_pk.material_cost * abs(mat.m_quantity)
+            #     print("_-------_")
+            # print(">>>>>>>>>>>>>")
+            # print("New total Cost for ", get_product_inventory, " : ", new_inv_cost, " UCOST ", Decimal(new_inv_cost)/get_product_inventory.quantity)
+            # print("UCost ", get_product_inventory.product_cost, " New Ucost",  Decimal(new_inv_cost)/get_product_inventory.quantity)
+            # print("TCost ", get_product_inventory.product_total_cost, " New Tcost",  new_inv_cost)
+
+            get_product_inventory.product_cost = round(Decimal(new_inv_cost) / get_product_inventory.quantity, 2)
+            get_product_inventory.product_total_cost = round(new_inv_cost, 2)
+            get_product_inventory.save()
+        # END MATERIAL COST CHANGE UPDATE INVENTORY COST
+            
+            # START INVENTORY COST CHANGE, UPDATE SALES COST
+            # Needs to wait until prod_inv ucost change before doing changes to sales ucost
+            for sale in inventory_trans:
+                sale.sales_pk.sales_unit_cost = sale.inventory_pk.product_cost
+                sale.sales_pk.sales_total_cost = sale.inventory_pk.product_cost * abs(sale.p_quantity)
+                sale.sales_pk.save()
+            # END INVENTORY COST CHANGE, UPDATE SALES COST
+
+        # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"}, status=404)
+        return JsonResponse({
+            "material_pk": material_name.pk,
+            "message": f"Successfully updated {message} {material_name}", 'variant': 'success'}, safe=False)
     
     def delete(self, request, id):
         material_inventory_item = get_object_or_404(RawMaterials_Inventory, pk=id)
@@ -196,60 +327,145 @@ class RawMaterialsInventoryPageView(APIView):
         except ProtectedError:
             return JsonResponse({"message": f"Delete action failed. {material_inventory_item.material_name} already has linked records."}, status=404)
         print(material_inventory_item.material_name)
-        return JsonResponse({"message": f"{material_inventory_item.material_name} has successfully deleted."})
+        return JsonResponse({
+            "material_pk": material_inventory_item.material_name.pk, # returns back material_pk to be used in inventoryMaterialApiSlice tag invalidation
+            "message": f"{material_inventory_item.material_name} has successfully deleted."
+        })
     
 class RawMaterialsInventoryHistoryPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = RawMaterials_InventoryTransaction.objects.all() # This is needed even we don't use it to perform permission_classes
 
-    def get(self, request, material_name):
-        material_inventory_transaction = RawMaterials_InventoryTransaction.objects.all().order_by('transaction_date', "created_at")
-        # m_inventory_transaction = RawMaterials_InventoryTransaction.objects.filter(materials_inventory_pk__material_name=RawMaterials.objects.get(material_name="Material 1").pk)
+    def get(self, request, material_pk):
+        print("FIFED")
         try:
-            material = RawMaterials.objects.get(material_name=material_name)
+            material = RawMaterials.objects.get(pk=material_pk)
         except RawMaterials.DoesNotExist:
             return JsonResponse({"data": "No results found"}, safe=False)
+        
+        # Gets current year
+        getYear = date.today().year
+        # change this later to get all inventory transaction where product inventory has stock
+        # because transaction will be continous and need to get transactions even it's in the past year
+        # only if they have stock
+        material_inventory_transaction = RawMaterials_InventoryTransaction.objects.filter(
+            transaction_date__year=getYear,
+            materials_inventory_pk__material_name=material
+        ).select_related(
+            'materials_inventory_pk',
+            'materials_inventory_pk__supplier',
+            'materials_inventory_pk__material_name',
+            'product_inventory_pk',
+            'product_inventory_pk__supplier',
+            'product_inventory_pk__product_name'
+        ).order_by(
+            'transaction_date', 
+            'created_at'
+        )
 
         data_list = []
         running_total = 0
+        print(material_inventory_transaction)
         for item in material_inventory_transaction:
-            if item.materials_inventory_pk.material_name == material:
-                if not item.product_inventory_pk==None:
-                    try:
-                        get_material_quantity_deducted = abs(item.m_quantity)
-                    except RawMaterials_Product.DoesNotExist:
-                        return JsonResponse({"data": "No results found"}, safe=False)
-                    running_total -= get_material_quantity_deducted
-                    data_set = {'transaction_date': item.transaction_date}
-                    data_set.update({"material": item.materials_inventory_pk.material_name.material_name})
-                    data_set.update({"supplier": item.product_inventory_pk.supplier.company_name})
-                    data_set.update({"product": item.product_inventory_pk.product_name.product_name})
-                    data_set.update({"quantity": abs(item.m_quantity)})
-                    data_set.update({"stock": ""})
-                    data_set.update({"uprice": item.materials_inventory_pk.material_cost})
-                    data_set.update({"total": get_material_quantity_deducted})
-                    data_set.update({"running_total": running_total})
-                    data_set.update({"inv_id": item.product_inventory_pk.pk})
-                    data_set.update({"id": item.pk})
-                    data_set.update({"type": "prod"})
-                    data_list.append(data_set)
-                else:
-                    running_total += item.materials_inventory_pk.quantity
-                    data_set = {'transaction_date': item.transaction_date}
-                    data_set.update({"material": item.materials_inventory_pk.material_name.material_name})
-                    data_set.update({"supplier": item.materials_inventory_pk.supplier.company_name})
-                    data_set.update({"product": ""})
-                    data_set.update({"quantity": item.materials_inventory_pk.quantity})
-                    data_set.update({"stock": item.materials_inventory_pk.material_stock_left})
-                    data_set.update({"uprice": item.materials_inventory_pk.material_cost})
-                    data_set.update({"total": item.materials_inventory_pk.quantity})
-                    data_set.update({"running_total": running_total})
-                    data_set.update({"inv_id": item.materials_inventory_pk.pk})
-                    data_set.update({"id": item.pk})
-                    data_set.update({"type": "mat"})
-                    data_list.append(data_set)
+            print("here af")
+            # Check if Product_Inventory PK exists in current record
+            if item.product_inventory_pk and item.m_quantity:
+                # Goes here when it has product_inventory_pk meaning user created a FINISHED PRODUCT
+                # using "RawMaterials_Inventory" therefore automatically creates "RawMaterials_InventoryTransaction"
+                running_total -= self.handle_material_quantity_deducted(item)
+                data_list.append(self.prepare_product_transaction(item, running_total))
+            elif item.materials_inventory_pk and item.product_inventory_pk is None:
+                # It should always goes here first.
+                # The query logic is ordered_by transaction_date. 
+                # So the user would have to create a Raw Material Inventory First. 
+                # then after it would automatically creates a "RawMaterials_InventoryTransaction" FIRST RECORD 
+                # hence "it should always goes here first".
+                # Because the logic is you can't create a Finished Product without Raw Materials.
+                running_total += item.materials_inventory_pk.quantity  # Add quantity to stock
+                data_list.append(self.prepare_inventory_transaction(item, running_total))
+
+
+
+
+        # for item in material_inventory_transaction:
+        #     if item.materials_inventory_pk.material_name == material:
+        #         if not item.product_inventory_pk==None:
+        #             try:
+        #                 get_material_quantity_deducted = abs(item.m_quantity)
+        #             except RawMaterials_Product.DoesNotExist:
+        #                 return JsonResponse({"data": "No results found"}, safe=False)
+        #             running_total -= get_material_quantity_deducted
+        #             data_set = {'transaction_date': item.transaction_date}
+        #             data_set.update({"material": item.materials_inventory_pk.material_name.material_name})
+        #             data_set.update({"supplier": item.product_inventory_pk.supplier.company_name})
+        #             data_set.update({"product": item.product_inventory_pk.product_name.product_name})
+        #             data_set.update({"quantity": abs(item.m_quantity)})
+        #             data_set.update({"stock": ""})
+        #             data_set.update({"uprice": item.materials_inventory_pk.material_cost})
+        #             data_set.update({"total": get_material_quantity_deducted})
+        #             data_set.update({"running_total": running_total})
+        #             data_set.update({"inv_id": item.product_inventory_pk.pk})
+        #             data_set.update({"id": item.pk})
+        #             data_set.update({"type": "prod"})
+        #             data_list.append(data_set)
+        #         else:
+        #             running_total += item.materials_inventory_pk.quantity
+        #             data_set = {'transaction_date': item.transaction_date}
+        #             data_set.update({"material": item.materials_inventory_pk.material_name.material_name})
+        #             data_set.update({"supplier": item.materials_inventory_pk.supplier.company_name})
+        #             data_set.update({"product": ""})
+        #             data_set.update({"quantity": item.materials_inventory_pk.quantity})
+        #             data_set.update({"stock": item.materials_inventory_pk.material_stock_left})
+        #             data_set.update({"uprice": item.materials_inventory_pk.material_cost})
+        #             data_set.update({"total": item.materials_inventory_pk.quantity})
+        #             data_set.update({"running_total": running_total})
+        #             data_set.update({"inv_id": item.materials_inventory_pk.pk})
+        #             data_set.update({"id": item.pk})
+        #             data_set.update({"type": "mat"})
+        #             data_list.append(data_set)
                     
-        return JsonResponse(data_list, safe=False)
+        return Response(data_list)
+    
+    def handle_material_quantity_deducted(self, item):
+        """Handles the material quantity deduction logic when raw material is consumed in production."""
+        try:
+            return abs(item.m_quantity)  # Return the absolute value of material quantity deducted
+        except RawMaterials_Product.DoesNotExist:
+            return 0
+            
+    def prepare_inventory_transaction(self, item, running_qty):
+        """Prepares a dictionary for raw material (inventory) transaction details."""
+        return {
+            'transaction_type': "restock",
+            'material': RawMaterialsInventorySerializer(item.materials_inventory_pk).data,
+            "supplier": item.materials_inventory_pk.supplier.company_name,
+            'product': '',
+            'quantity': item.materials_inventory_pk.quantity,
+            'stock': item.materials_inventory_pk.material_stock_left,
+            'unit_cost': item.materials_inventory_pk.material_cost,
+            'total_cost': item.materials_inventory_pk.material_total_cost,
+            'running_total': running_qty,
+            'id': item.materials_inventory_pk.pk,  # pk of RawMaterials_Inventory
+            'transaction_id': item.pk  # pk of RawMaterials_InventoryTransaction
+        }
+    
+    def prepare_product_transaction(self, item, running_qty):
+        """Prepares a dictionary for product (finished goods) transaction details."""
+        return {
+            'transaction_type': "production",
+            'material': RawMaterialsInventorySerializer(item.materials_inventory_pk).data,
+            'product': ProductInventorySerializer(item.product_inventory_pk).data,
+            'supplier': item.product_inventory_pk.supplier.company_name,
+            'quantity': abs(item.m_quantity),
+            'stock': "",  # No stock left since it's a finished product
+            'unit_cost': item.materials_inventory_pk.material_cost,
+            'total': abs(item.m_quantity) * item.materials_inventory_pk.material_cost,
+            'running_total': running_qty,
+            'id': item.product_inventory_pk.pk,  # pk of Product_Inventory
+            'transaction_id': item.pk  # pk of RawMaterials_InventoryTransaction
+        }
+
+    
 
 class ProductInventoryPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
@@ -381,6 +597,29 @@ class ProductInventoryPageView(APIView):
         # return JsonResponse({'message': f"Successfully updated Inventory", 'variant': 'success'}, safe=False)
         return JsonResponse({'message': f"Successfully updated {message} {product_name}", 'variant': 'success'}, safe=False)
     
+    def patch(self, request, id):
+        print("PAtch triggered")
+        data = json.loads(request.body.decode('utf-8'))
+        product_inventory_item = get_object_or_404(Product_Inventory, pk=id)
+        product_name = get_object_or_404(Product, product_name=product_inventory_item.product_name)
+
+        message = costChangeMessage(product_inventory_item, "product_cost", data['price_per_unit'])
+
+        product_inventory_item.product_cost = Decimal(data['price_per_unit'])
+        product_inventory_item.product_total_cost = Decimal(data['total_cost'])
+        product_inventory_item.save()
+
+        inventory_trans = InventoryTransaction.objects.filter(~Q(sales_pk=None), inventory_pk=product_inventory_item.pk)
+        for sale in inventory_trans:
+            sale.sales_pk.sales_unit_cost = sale.inventory_pk.product_cost
+            sale.sales_pk.sales_total_cost = sale.inventory_pk.product_cost * abs(sale.p_quantity)
+            sale.sales_pk.save()
+
+        # return JsonResponse({'message': f"Successfully updated Inventory", 'variant': 'success'}, safe=False)
+        return JsonResponse({
+            "product_pk": product_name.pk,
+            'message': f"Successfully updated {message} {product_name}", 'variant': 'success'}, safe=False)
+    
     def delete(self, request, id):
         print(id)
         product_inventory = get_object_or_404(Product_Inventory, pk=id)
@@ -415,7 +654,10 @@ class ProductInventoryPageView(APIView):
         except ProtectedError:
             return JsonResponse({"message": f"Delete action failed. {product_inventory.product_name} already has linked records."}, status=404)
         print(product_inventory.product_name)
-        return JsonResponse({"message": f"{product_inventory.product_name} has successfully deleted."})
+        return JsonResponse({
+            "product_pk": product_inventory.product_name.pk, # returns back product_pk to be used in inventoryApiSlice tag invalidation
+            "message": f"{product_inventory.product_name} has successfully deleted."
+        })
 
 class InventoryHistoryPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
@@ -427,46 +669,71 @@ class InventoryHistoryPageView(APIView):
             product = Product.objects.get(pk=product_pk)
         except Product.DoesNotExist:
             return JsonResponse({"data": "No results found"}, safe=False)
-        inventory_transactions = InventoryTransaction.objects.filter(inventory_pk__product_name=product).order_by('transaction_date', "created_at")
+        
+        # Gets current year
+        getYear = date.today().year
+        inventory_transactions = InventoryTransaction.objects.filter(
+            transaction_date__year=getYear,
+            inventory_pk__product_name=product
+        ).select_related(
+            'inventory_pk', 
+            'inventory_pk__supplier', 
+            'inventory_pk__product_name',
+            'sales_pk',
+            'sales_pk__customer',
+            'sales_pk__sales_invoice'
+        ).order_by(
+            'transaction_date', 
+            'created_at'
+        )
                 
         data_list = []
         running_qty = 0
-
+        
         for item in inventory_transactions:
             if item.inventory_pk and item.p_quantity is None:
+                data_list.append(self.prepare_inventory_transaction(item, running_qty))
                 running_qty += item.inventory_pk.quantity
-                data_set = {'product_name': item.inventory_pk.product_name.product_name} # Model.foreignkey.foreignkey
-                data_set.update({"cust_supp": item.inventory_pk.supplier.company_name}) # Model.foreignkey.foreignkey
-                data_set.update({"transaction_date": item.transaction_date})
-                data_set.update({"quantity": item.inventory_pk.quantity})
-                data_set.update({"stock": item.inventory_pk.product_stock_left})
-                data_set.update({"u_cost": item.inventory_pk.product_cost})
-                data_set.update({"running_quantity": running_qty})
-                data_set.update({"type": "inv"})
-                data_set.update({"id": item.inventory_pk.pk}) # pk of product_inv
-                data_set.update({"pk": item.pk}) # pk of prod_inv_trans
-                data_list.append(data_set)
-            else:
-                running_qty -= item.sales_pk.sales_quantity
-                data_set = {'product_name': item.sales_pk.product_name.product_name} # Model.foreignkey.foreignkey
-                data_set.update({"cust_supp": item.sales_pk.customer.company_name}) # Model.foreignkey.foreignkey
-                data_set.update({"transaction_date": item.transaction_date})
-                data_set.update({"quantity": item.sales_pk.sales_quantity})
-                data_set.update({"u_cost": item.sales_pk.sales_unit_cost})
-                data_set.update({"u_price": round(Decimal(item.sales_pk.sales_unit_price) / Decimal(1.12), 2)}) # Gross selling price
-                data_set.update({"running_quantity": running_qty})
-                data_set.update({"type": "sales"})
-                data_set.update({"id": item.sales_pk.pk}) # pk of sales
-                data_set.update({"pk": item.pk})  # pk of prod_inv_trans
-                data_set.update({"hotodg": "sjdgbkjsdfsjdfjksdjkfbsdjkfbsjdf"})
-                data_list.append(data_set)
-                    
 
-        # asset_json = json.dumps({"data": [asset.to_dict() for asset in page_obj.object_list]})
-        # return JsonResponse(page_obj.object_list, safe=False)
+            elif item.sales_pk:
+                running_qty -= item.sales_pk.sales_quantity
+                data_list.append(self.prepare_sales_transaction(item, running_qty))
+
+
         return JsonResponse(data_list, safe=False)
-    def post(self, request):
-        pass
+    
+    def prepare_inventory_transaction(self, item, running_qty):
+        return {
+            'transaction_type': "restock",
+            'product': ProductInventorySerializer(item.inventory_pk).data,
+            'transaction_date': item.transaction_date,
+            'quantity': item.inventory_pk.quantity,
+            'unit_cost': item.inventory_pk.product_cost,
+            'running_quantity': running_qty + item.inventory_pk.quantity,
+            'inventory_stock_left': item.inventory_pk.product_stock_left,
+            'total_cost': item.inventory_pk.product_total_cost,
+            'id': item.inventory_pk.pk,  # pk of Product_Inventory
+            'transaction_id': item.pk  # pk of InventoryTransaction
+        }
+
+    
+    def prepare_sales_transaction(self, item, running_qty):
+        return {
+            'transaction_type': "sales",
+            'product': SalesSerializer(item.sales_pk).data,
+            'transaction_date': item.transaction_date,
+            'quantity_sold': item.sales_pk.sales_quantity,
+            'unit_cost': item.sales_pk.sales_unit_cost,
+            'unit_price': round(Decimal(item.sales_pk.sales_unit_price) / Decimal(1.12), 2),  # Adjusted price (net)
+            'running_quantity': running_qty,
+            'sales_gross_price': item.sales_pk.sales_gross_price,
+            'sales_VAT': item.sales_pk.sales_VAT,
+            'total_sales_price': item.sales_pk.sales_total_price,
+            'margin': item.sales_pk.sales_margin,
+            'sales_margin_percent': item.sales_pk.sales_margin_percent,
+            'transaction_id': item.pk,  # pk of InventoryTransaction
+            'inventory_id': item.inventory_pk.pk  # pk of Product_Inventory
+        }
 
 class InventorySummaryPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)

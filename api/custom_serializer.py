@@ -12,27 +12,21 @@ class CustomProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = ['product_name']
 
-class CustomSalesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Sales
-        fields = []
+class InventoryTransactionSerializer(serializers.ModelSerializer):
+    # sales_pk = serializers.PrimaryKeyRelatedField(queryset=Sales.objects.all())
+    # inventory_pk = serializers.PrimaryKeyRelatedField(queryset=Product_Inventory.objects.all())
 
-class CustomInvoiceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = SalesInvoice
-        fields = ['sales_invoice', 'invoice_status']
+        model: InventoryTransaction
+        fields = ['pk']
 
-# For Inventory Transaction Serializer
-class CustomSalesTransactionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Sales
-        fields = ['']
 
 # For Sales Serializer
-class CustomProductInventorySerializer(serializers.ModelSerializer):
+class CustomSalesSerializerProperty(serializers.ModelSerializer):
     supplier = CustomSupplierSerializer()
     product_name = CustomProductSerializer()
+    pk = InventoryTransactionSerializer()
 
     class Meta:
         model = Product_Inventory
-        fields = ['supplier', 'product_name']
+        fields = ['supplier', 'product_name', 'pk']

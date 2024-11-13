@@ -53,6 +53,10 @@ class SalesPageViewDraft(APIView):
             sales_serializer = SalesSerializer(sales, many=True)
             return JsonResponse(sales_serializer.data, safe=False)
 
+        products = ProductSerializer(Product.objects.all(), many=True)
+        supplier = SupplierSerializer(Supplier.objects.all(), many=True)
+        customer = CustomerSerializer(Customer.objects.all(), many=True)
+
         # If id is supplied return early
         if id is not None:
             sales_item = get_object_or_404(Sales, pk=id)
@@ -62,7 +66,15 @@ class SalesPageViewDraft(APIView):
             serialized_data = sales_serialized.data
             serialized_data['customer'] = {"id":get_customer.pk, "company_name": get_customer.company_name}
 
-            return JsonResponse(serialized_data, safe=False)
+            api = {
+                "product": products.data, 
+                "supplier": supplier.data, 
+                "customer": customer.data, 
+                "sale": serialized_data,
+            }
+
+            return JsonResponse(api, safe=False)
+        
 
         try:
             year_str, month_str = date_filter.split("-")
@@ -152,12 +164,8 @@ class SalesPageViewDraft(APIView):
             'product_name'
         )
 
-
         # Declare here incase we need to return early
         data_title = str(year) + "-" + str(month)
-        products = ProductSerializer(Product.objects.all(), many=True)
-        supplier = SupplierSerializer(Supplier.objects.all(), many=True)
-        customer = CustomerSerializer(Customer.objects.all(), many=True)
 
 
         # Check if there is a sales

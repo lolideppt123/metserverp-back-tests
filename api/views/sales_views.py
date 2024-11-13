@@ -22,19 +22,30 @@ class SalesPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
     
-    def get(self, request, id=None, option=None, **kwargs):
+    def get(self, request, id=None, **kwargs):
         start_time = time.time()
 
-        ###############
-        # This block is newly added
-        if id is None and option is None:
-            # Returns all sales if no year and id supplied
+        # Get filters from query parameters
+        invoice_filter = request.GET.getlist('salesInvoice')
+        customer_filter = request.GET.getlist('customer')
+        product_supplier_filter = request.GET.getlist('productName')  # Handle list of product names
+        date_filter = request.GET.get('dateFilter')
+
+        product_supplier_filter = [
+            int(product) if product.isdigit() else product
+            for product in product_supplier_filter
+        ]
+
+        # Returns all sales if no year and id supplied
+        if id is None and date_filter is None:
             sales = Sales.objects.all()
             sales_serializer = SalesSerializer(sales, many=True)
             return JsonResponse(sales_serializer.data, safe=False)
-        ################
 
-        # Moved
+        products = ProductSerializer(Product.objects.all(), many=True)
+        supplier = SupplierSerializer(Supplier.objects.all(), many=True)
+        customer = CustomerSerializer(Customer.objects.all(), many=True)
+
         # If id is supplied return early
         if id is not None:
             sales_item = get_object_or_404(Sales, pk=id)
@@ -44,73 +55,149 @@ class SalesPageView(APIView):
             serialized_data = sales_serialized.data
             serialized_data['customer'] = {"id":get_customer.pk, "company_name": get_customer.company_name}
 
-            return JsonResponse(serialized_data, safe=False)
+            api = {
+                "product": products.data, 
+                "supplier": supplier.data, 
+                "customer": customer.data, 
+                "sale": serialized_data,
+            }
 
+            return JsonResponse(api, safe=False)
 
+        # build date filter
         try:
-            year_str, month_str = option.split("-")
+            year_str, month_str = date_filter.split("-")
             year = int(year_str)
-            # month = int(month_str)
-            month = 10
+            month = int(month_str)
+            # month = 10
         except:
             year = datetime.date.today().year
             month = datetime.date.today().month
+
+        # Setting filter Query for supplier and product default is []
+        if product_supplier_filter is not None and len(product_supplier_filter) > 0:
+            supplier_filter = []
+            product_filter = []
+
+            # Seperates product and suppliers filter
+            for item in product_supplier_filter:
+                if isinstance(item, str):
+                    # print("this is str", item)
+                    product_filter.append(item)
+                elif isinstance(item, int):
+                    # print("this is int", item)
+                    supplier_filter.append(item)
+
+            # Build the product query based on the presence of filters
+            # Start with an empty query
+            product_query = Q()  
+
+            # Check conditions and build the query
+            if product_filter and supplier_filter:
+                # Both filters are present, use OR logic
+                product_query = Q(sales_transaction__product_name__product_name__in=product_filter) | Q(sales_transaction__supplier__in=supplier_filter)
+            elif product_filter:
+                # Only product filter is present
+                product_query = Q(sales_transaction__product_name__product_name__in=product_filter)
+            elif supplier_filter:
+                # Only supplier filter is present
+                product_query = Q(sales_transaction__supplier__in=supplier_filter)
+            else:
+                # No filtering, returns all
+                product_query = Q() 
+
+        else:
+            # Goes here if product_supplier_filter is none or empty. 
+            # which is also the default query for both supplier and product
+            # it also means len(supplier_filter) == 0 and len(product_filter) == 0
+            product_query = Q()  # No filtering, returns all
+
+
+        # Setting filter for customer
+        if customer_filter:
+            customer_query = Q(customer__company_name__in=customer_filter)
+        else:
+            customer_query = Q()  # Returns all customers
+
+
+        # Setting filter for invoice
+        if len(invoice_filter) == 0 or len(invoice_filter) == 3:
+            invoice_query = Q()
+        else:
+            # Initialize an empty query
+            invoice_query = Q()
+
+            # Check for each filter and construct the query
+            if 'Without Invoice' in invoice_filter:
+                invoice_query |= Q(sales_invoice__sales_invoice__startswith='noinv')
+
+            if 'Sample' in invoice_filter:
+                invoice_query |= Q(sales_invoice__sales_invoice__startswith='sample')
+
+            if 'With Invoice' in invoice_filter:
+                invoice_query |= ~Q(sales_invoice__sales_invoice__regex=r'[a-zA-Z]')
+
         
-        # year_sales = Sales.objects.filter(sales_date__year=getYear)
-        month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
+        combined_filter_query = product_query & customer_query & invoice_query
+        
+        # This query will return all sales from YEAR-MONTH-01 to YEAR-MONTH-31/30/29/28
+        month_year_sales = Sales.objects.filter(sales_date__year=year, sales_date__month=month)
+        filtered_monthly_year_sales = month_year_sales.filter(
+            combined_filter_query # If there is filter it will filter, if not it will return normal values
+        ).order_by(
+            'sales_invoice',
+            'sales_date', 
+            'created_at', 
+            'customer', 
+            'product_name'
+        )
+
+        # Declare here incase we need to return early
+        data_title = str(year) + "-" + str(month)
 
         # Check if there is a sales
-        # if not year_sales.exists():
-        if not month_year_sales.exists():
-            return JsonResponse([],safe=False)
+        if not filtered_monthly_year_sales.exists():
+            sales_data = {
+                "sales_list": [],
+                "sales_totals": {},
+                "sales_cummulative": {}
+            }
+            api = {
+                "products": products.data, 
+                "supplier": supplier.data, 
+                "customer": customer.data, 
+                "sales": sales_data,
+                "data_title": data_title
+            }
+            return JsonResponse(api, safe=False)
+        
+        sales_serializer = SalesSerializer(filtered_monthly_year_sales, many=True)
+        filtered_serialized_data = sales_serializer.data
+        # Done with the list of sales that's been filtered.
 
-
-        # getEndDay = calendar.monthrange(getYear, 12)
-
-        # getStartDate = str(getYear) + '-01-01'
-        # getEndDate = str(getYear) + '-12-' + str(getEndDay[1])
-
-        # date_range = getDateRange(getStartDate, getEndDate)
-        # data_list = []
-        # for index in date_range:
-        #     sales = Sales.objects.filter(sales_date__gte=index[0], sales_date__lte=index[1]).order_by('sales_invoice', 'sales_date', 'created_at', 'customer', 'product_name')
-        #     sales_commulative = Sales.objects.filter(sales_date__gte=date_range[0][0], sales_date__lte=index[1])
-
-        #     sales_serializer = SalesSerializer(sales, many=True)
-        #     new_serializer = list(sales_serializer.data)
-
-        #     sales_list = getSalesTotals(sales, "TOTAL_SALES") # helper.py
-        #     cumm_sales_list = getSalesTotals(sales_commulative, "CUMM_TOTAL_SALES") # helper.py
-
-        #     data_title = str(index[0].year) + "-" + str(index[0].month)
-        #     new_serializer.append(sales_list)
-        #     new_serializer.append(cumm_sales_list)
-        #     new_serializer.append({"data_title":data_title})
-        #     data_list.append(new_serializer)
 
         getEndDay = calendar.monthrange(year, month)
         start_date = datetime.datetime.strptime(str(year) + '-01-01', "%Y-%m-%d").date()
         end_date = datetime.datetime.strptime(str(year) + "-" + str(month) + "-" + str(getEndDay[1]), "%Y-%m-%d").date()
 
-        # Get the first DAY and MONTH of the year for GTE and get the last DAY of the OPTION Month
-        month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
 
-        sales_serializer = SalesSerializer(month_year_sales, many=True)
+        # Get the first DAY and MONTH of the year for GTE and get ONLY the LAST DAY of the SUPPLIED MONTH. 
+        # 
+        # LAST DAY of the SUPPLIED MONTH vs LAST DAY of the YEAR will result in a different cummulative totals
+        month_year_sales_commulative = Sales.objects.filter(sales_date__gte=start_date, sales_date__lte=end_date)
+        filtered_monthly_year_sales_commulative = month_year_sales_commulative.filter(
+            combined_filter_query
+        )
 
         # Compute sales totals & cummulative
-        sales_list = getSalesTotals(month_year_sales, "TOTAL_SALES") # helper.py
-        cumm_sales_list = getSalesTotals(month_year_sales_commulative, "CUMM_TOTAL_SALES") # helper.py
-        data_title = str(year) + "-" + str(month)
+        sales_totals = getSalesTotals(filtered_monthly_year_sales, "TOTAL_SALES") # helper.py
+        sales_cummulative = getSalesTotals(filtered_monthly_year_sales_commulative, "CUMM_TOTAL_SALES") # helper.py
 
         sales_data = {
-            "sales_list": sales_serializer.data,
-            "sales_totals": sales_list,
-            "sales_cummulative": cumm_sales_list
+            "sales_list": filtered_serialized_data,
+            "sales_totals": sales_totals,
+            "sales_cummulative": sales_cummulative
         }
-        
-        products = ProductSerializer(Product.objects.all(), many=True)
-        supplier = SupplierSerializer(Supplier.objects.all(), many=True)
-        customer = CustomerSerializer(Customer.objects.all(), many=True)
 
         api = {
             "products": products.data, 
@@ -197,6 +284,42 @@ class SalesPageView(APIView):
             pass
         else:
             product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
+            print(data)
+            updateSalesProcedure(product_inventory, data)
+
+        # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"})
+        return JsonResponse({'message': f"Successfully updated Sales", 'variant': 'success'})
+    
+    def patch(self, request, id):
+        print("patch triggered")
+        data = json.loads(request.body.decode('utf-8'))
+        sales_date = datetime.datetime.strptime(data['sales_date'], "%Y-%m-%d").date()
+        sales_invoice = data['sales_invoice']
+        customer = data['customer']['company_name']
+
+        product_name = data['product_name']
+        quantity_diff = data['quantity_diff']
+
+        # Allows the user to insert Sales into an invoice
+        if sales_invoice == '':
+            sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
+        invoice_obj, created = SalesInvoice.objects.get_or_create(sales_invoice=sales_invoice, invoice_date=sales_date)
+        cust_obj = get_object_or_404(Customer, company_name=customer)
+
+        # reassign values back as validated data
+        data['sales_invoice'] = invoice_obj
+        data['customer']['company_name'] = cust_obj
+
+
+        # User did not change sales quantity. goes here
+        if quantity_diff == 0:
+            # Save changes
+            updated_sales = update_sales_obj(id, data)
+            updated_sales.save()
+            pass
+        else:
+            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=product_name), ordered_date__lte=sales_date)
+            print(data)
             updateSalesProcedure(product_inventory, data)
 
         # return JsonResponse({"message": "Feature has not yet been added. Please Contact me MASTER JOSEPH"})
@@ -214,9 +337,14 @@ class SalesPageView(APIView):
             product_inventory.save()
             item_inventory_transaction.delete()
             sales.delete()
+
+            product_pk = product_inventory.product_name.pk
         except ProtectedError:
             return JsonResponse({"message": f"Delete action failed. {sales.product_name} already has linked records."}, status=404)
-        return JsonResponse({"message": f"Invoice#: {sales.sales_invoice} {sales.product_name} has successfully deleted."})
+        return JsonResponse({
+            "product_pk": product_pk, # returns back product_pk to be used in salesApiSLice tag invalidation
+            "message": f"Invoice#: {sales.sales_invoice} {sales.product_name} has successfully deleted.",
+        })
     
 
 @api_view(['POST'])

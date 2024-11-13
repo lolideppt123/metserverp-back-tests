@@ -15,10 +15,10 @@ urlpatterns = [
 
     path('inventory/materials/', RawMaterialsInventoryPageView.as_view(), name='materials_inventory'),
     path('inventory/materials/<int:id>', RawMaterialsInventoryPageView.as_view(), name='materials_inventory_edit'),
-    path('inventory/materials/transaction/<material_name>', RawMaterialsInventoryHistoryPageView.as_view(), name='materials_inventory_transaction'),
+    path('inventory/materials/transaction/<int:material_pk>', RawMaterialsInventoryHistoryPageView.as_view(), name='materials_inventory_transaction'),
     
     path('inventory/products/', ProductInventoryPageView.as_view(), name='products_inventory'),
-    path('inventory/transaction/<int:id>/edit', ProductInventoryPageView.as_view(), name='products_inventory_edit'),
+    path('inventory/products/<int:id>', ProductInventoryPageView.as_view(), name='products_inventory_edit'),
     path('inventory/products/transaction/<int:product_pk>', InventoryHistoryPageView.as_view(), name='products_inventory_transaction'),
     path('inventory/inventory-summary', InventorySummaryPageView.as_view(), name='inventory_summary'),
 
@@ -28,7 +28,7 @@ urlpatterns = [
     path('suppliers/<int:id>', SupplierPageView.as_view(), name='supplier'),
     
     path('sales/', SalesPageView.as_view(), name='sales'),
-    path('sales/<str:option>', SalesPageView.as_view(), name='sales'),
+    # path('sales/<str:option>', SalesPageView.as_view(), name='sales'),
     path('draft-sales/', SalesPageViewDraft.as_view(), name='sales'),
     path('sales/transaction/<int:id>/edit', SalesPageView.as_view(), name='sales_edit'),
     path('sales/sales-summary/data-chart', SalesSummaryChartDataView.as_view(), name='sales_summary_chart'),
@@ -40,7 +40,7 @@ urlpatterns = [
     path('sales-invoice/', SalesInvoicePageView.as_view(), name='sales'),
     path('sales-invoice/<int:id>', SalesInvoicePageView.as_view(), name='sales_invoice'),
 
-
+    path('dictionaries/', getDictionaryData),
     path('products/unit', UnitPageView.as_view(), name='units'),
     path('products/unitcategory', UnitCategoryPageView.as_view(), name='unit_category'),
     path('products/getunitprice', getUnitPriceProduct, name='get_unit_price'),

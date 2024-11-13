@@ -106,7 +106,9 @@ class ProductInventorySerializer(serializers.ModelSerializer):
             'order_update',
             'inventory_note',
             'supplier',
+            'ingredients_transaction'
         )
+        depth = 3
 
 class SalesSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product_name.product_name')
@@ -115,7 +117,7 @@ class SalesSerializer(serializers.ModelSerializer):
     sales_status = serializers.CharField(source='sales_invoice.invoice_status', allow_null=True)
     sales_paid_date = serializers.CharField(source='sales_invoice.invoice_paid_date', allow_null=True)
     sales_date = serializers.DateField(format="%Y-%m-%d")
-    sales_transaction = CustomProductInventorySerializer(many=True)
+    # sales_transaction = CustomSalesSerializerProperty(many=True)
 
     class Meta:
         model = Sales
@@ -142,7 +144,7 @@ class SalesSerializer(serializers.ModelSerializer):
             'sales_paid_date',
             'sales_transaction',
         )
-        # depth = 2 # https://testdriven.io/blog/drf-serializers/
+        depth = 2 # https://testdriven.io/blog/drf-serializers/
 
 class SalesInvoiceSerializer(serializers.ModelSerializer):
     invoice_paid_date = serializers.DateTimeField(format="%Y-%m-%d")

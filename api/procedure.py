@@ -81,6 +81,7 @@ def updateSalesProcedure(queryset, data):
     inv_trans = get_object_or_404(InventoryTransaction, sales_pk=sales_pk)
 
     # If LESS than 0 sales_quantity was reduced compared to the actual
+    diff_quantity = Decimal(diff_quantity)
     if diff_quantity < 0:
         # Need to return excess quantity | Update everything
 

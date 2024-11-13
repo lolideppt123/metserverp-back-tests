@@ -8,6 +8,7 @@ from api.procedure import *
 from django.db.models.deletion import ProtectedError
 from rest_framework import permissions
 import json
+from rest_framework.response import Response
 
 class RawMaterialsPageView(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
@@ -439,8 +440,33 @@ class SupplierPageView(APIView):
         return JsonResponse({"message": f"{supplier.company_name} has successfully deleted."})
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def getDictionaryData(request):
 
+    try:
+        suppliers = SupplierSerializer(Supplier.objects.all(), many=True)
+        products = ProductSerializer(Product.objects.all(), many=True)
+        materials = MaterialsSerializer(RawMaterials.objects.all(), many=True)
+        customers = CustomerSerializer(Customer.objects.all(), many=True)
+        units = UnitSerializer(Unit.objects.all(), many=True)
+        categories = UnitCategorySerializer(UnitCategory.objects.all(), many=True)
 
+        api = {
+            "products": products.data,
+            "suppliers": suppliers.data,
+            "materials": materials.data,
+            "customers": customers.data,
+            "units": units.data,
+            "categories": categories.data
+        }
+
+        return Response(api)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+        
 
 
 
