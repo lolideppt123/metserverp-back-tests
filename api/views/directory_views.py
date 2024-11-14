@@ -78,6 +78,34 @@ class RawMaterialsPageView(APIView):
 
         return JsonResponse({"message": "Successfully saved changes"})
     
+    def patch(self, request, id):
+        material = get_object_or_404(RawMaterials, pk=id)
+        data = json.loads(request.body.decode('utf-8'))
+        
+        material_name = data['material_name']
+        material_min_stock = data['material_min_stock']
+        material_unit = data['material_unit']
+        material_note = data['material_note']
+
+        if (material.material_name).lower() == material_name.lower():
+            if Decimal(material_min_stock) < 0:
+                return {'label':'material_min_stock', 'message':'Invalid Entry'}
+        else:
+            validation = registerNameValidation(material_name, material_min_stock, "no data", "material")
+            if validation:
+                return JsonResponse(validation, status=500)
+            chk_material_name = RawMaterials.objects.filter(material_name__iexact=material_name)
+            if chk_material_name:
+                return JsonResponse({'label':'material_name', 'message':'Material Already Exists'}, status=500)
+        
+        material.material_name = material_name
+        material.material_min_stock = material_min_stock
+        material.material_unit = Unit.objects.get(unit_name=material_unit)
+        material.material_note = material_note
+        material.save()
+
+        return JsonResponse({"message": "Successfully saved changes"})
+    
     def delete(self, request, id):
         material = get_object_or_404(RawMaterials, pk=id)
         try:
