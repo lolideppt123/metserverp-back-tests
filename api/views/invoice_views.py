@@ -17,6 +17,9 @@ from rest_framework.views import APIView
 from rest_framework import permissions
 from rest_framework.decorators import permission_classes, api_view
 import calendar
+from rest_framework.response import Response
+from rest_framework import status
+
 
 
 class SalesInvoicePageView(APIView):
@@ -24,9 +27,23 @@ class SalesInvoicePageView(APIView):
     queryset = SalesInvoice.objects.all() # This is needed even we don't use it to perform permission_classes
 
     def get(self, request, id=None):
-        invoice_list = SalesInvoice.objects.all()
+        
         if id:
-            print("id is ", id)
+            # Get the SalesInvoice by its primary key
+            print("Id is: ", id)
+            try:
+                # Use reverse lookup from sales_invoice -> sales
+                sales_invoice = SalesInvoice.objects.prefetch_related('sales_set').get(pk=id)
+                # Get the sales that are in the invoice
+                serializer = SalesInvoiceWithSalesSerializer(sales_invoice)
+
+                return Response(serializer.data)
+            except SalesInvoice.DoesNotExist:
+                return Response({"message": "Sales invoice not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+        invoice_list = SalesInvoice.objects.all()
+            
         data_list = []
         for invoice in invoice_list:
             invoice_total = 0
@@ -81,16 +98,34 @@ class SalesInvoicePageView(APIView):
 
     def patch(self, request, id):
         data = json.loads(request.body.decode('utf-8'))
-        invoice_item = get_object_or_404(SalesInvoice, pk=id)
+        invoice_data = data['sales_invoice']
+
+        try:
+            invoice_item = get_object_or_404(SalesInvoice, pk=id)
+        except SalesInvoice.DoesNotExist:
+            return Response({"message": "No Invoice found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # If invoice was changed and "" goes here.
+        # It's being checked through it's id.
+        if invoice_item.sales_invoice != invoice_data and invoice_data != "":
+            # Checks if that invoice already exists
+            invoice_number = SalesInvoice.objects.filter(sales_invoice=invoice_data).first()
+            if invoice_number:
+                # Return early if exists
+                return Response({"message": "Failed to update. Invoice already exists"}, status=status.HTTP_409_CONFLICT)
+            else:
+                # Apply change to invoice
+                invoice_item.sales_invoice = invoice_data
+                
 
         invoice_item.invoice_status = data['invoice_status']
-        if data['pay_date'] == "":
-            data['pay_date'] = None
+        if data['invoice_paid_date'] == "":
+            data['invoice_paid_date'] = None
         
-        invoice_item.invoice_paid_date = data['pay_date']
+        invoice_item.invoice_paid_date = data['invoice_paid_date']
         invoice_item.save()
         invoice = (invoice_item.sales_invoice[:8] + '..') if len(invoice_item.sales_invoice) > 8 else invoice_item.sales_invoice
-        return JsonResponse({"message": f"Invoice#: {invoice} successfully updated."}, safe=False)
+        return Response({"message": f"Invoice#: {invoice} successfully updated."}, status=status.HTTP_200_OK)
 
     def delete(self, request, id):
         invoice_item = get_object_or_404(SalesInvoice, pk=id)
@@ -100,7 +135,7 @@ class SalesInvoicePageView(APIView):
         try:
             invoice_item.delete()
         except ProtectedError:
-            return JsonResponse({"message": f"Delete action failed. Invoice# {invoice_item.sales_invoice} already has linked records."}, status=404)
+            return JsonResponse({"message": f"Delete action failed. Invoice# {invoice} already has linked records."}, status=404)
         return JsonResponse({"message": f"Invoice: {invoice} has successfully deleted."})
 
     

@@ -146,6 +146,22 @@ class SalesSerializer(serializers.ModelSerializer):
         )
         depth = 2 # https://testdriven.io/blog/drf-serializers/
 
+class SalesInvoiceWithSalesSerializer(serializers.ModelSerializer):
+    sales = SalesSerializer(source='sales_set', many=True)
+
+    class Meta:
+        model = SalesInvoice
+        fields = (
+            'pk',
+            'sales_invoice',
+            'invoice_status',
+            'invoice_paid_date',
+            'invoice_note',
+            'created_at',
+            'updated_at',
+            'sales',  # This is the nested Sales
+        )
+
 class SalesInvoiceSerializer(serializers.ModelSerializer):
     invoice_paid_date = serializers.DateTimeField(format="%Y-%m-%d")
     class Meta:

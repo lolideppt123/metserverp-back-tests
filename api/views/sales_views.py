@@ -224,7 +224,9 @@ class SalesPageView(APIView):
         
         if sales_invoice == '':
             sales_invoice = f'noinv-{sales_date}-' + str(uuid.uuid4())
-        elif sales_invoice.lower():
+        elif sales_invoice.lower() == 'sample':
+            print("Sales Invoice Lower: ", sales_invoice.lower())
+            print("Sales Invoice: ",sales_invoice)
             sales_invoice = f'sample-{sales_date}-' + str(uuid.uuid4())
 
         invoice_obj = SalesInvoice.objects.create(sales_invoice=sales_invoice, invoice_date=sales_date, invoice_note=data['sales_note'])
@@ -233,6 +235,7 @@ class SalesPageView(APIView):
         # reassign values back as validated data
         data['sales_invoice'] = invoice_obj
         data['customer']['company_name'] = customer_obj
+        
 
         # Loop throught number of products
         # Create sales in every loop
@@ -248,13 +251,16 @@ class SalesPageView(APIView):
             # Prevents the User to input sales before starting Inventory                (Checked in getUnitPriceProduct)
 
             # Query inventory less than or equal sales date
-            product_inventory = Product_Inventory.objects.filter(product_name = Product.objects.get(product_name=item['product']), ordered_date__lte=sales_date)
+            product_inventory = Product_Inventory.objects.filter(
+                product_name = Product.objects.get(product_name=item['product']), 
+                ordered_date__lte=sales_date,
+                product_stock_left__gt=0
+            )
 
             # Procedure Deducts Inventory Stock, creates Sales Instance, creates InventoryHistory Instance
             addSalesProcedure(product_inventory, item['sales_quantity'], data)
             
         return JsonResponse({"message": "Sales successfully Added.", 'variant': 'success'})
-        # return JsonResponse({"message": f"Sales successfully saved.\nInvoice: {invoice_obj} Customer: {obj.company_name} Order Date:{sales_date.strftime('%b-%d-%Y')}"})
 
     def put(self, request, id):
         data = json.loads(request.body.decode('utf-8'))

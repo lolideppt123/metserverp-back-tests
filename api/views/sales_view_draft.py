@@ -18,11 +18,13 @@ import calendar
 import time
 
 
-class SalesPageView(APIView):
+class SalesPageViewDraft(APIView):
     permission_classes = (permissions.DjangoModelPermissions,)
     queryset = Sales.objects.all() # This is needed even we don't use it to perform permission_classes
     
     def get(self, request, id=None, **kwargs):
+        
+        print("SALES DRAFT")
         start_time = time.time()
 
         # Get filters from query parameters
