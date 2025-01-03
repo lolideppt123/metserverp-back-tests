@@ -99,6 +99,7 @@ class SalesInvoicePageView(APIView):
     def patch(self, request, id):
         data = json.loads(request.body.decode('utf-8'))
         invoice_data = data['sales_invoice']
+        invoice_date = data['sales_date']
 
         try:
             invoice_item = get_object_or_404(SalesInvoice, pk=id)
@@ -114,6 +115,10 @@ class SalesInvoicePageView(APIView):
                 # Return early if exists
                 return Response({"message": "Failed to update. Invoice already exists"}, status=status.HTTP_409_CONFLICT)
             else:
+                if invoice_data.lower() == 'sample':
+                    invoice_data = f'sample-{invoice_date}-' + str(uuid.uuid4())
+                elif invoice_data.lower() == 'noinv':
+                    invoice_data = f'noinv-{invoice_date}-' + str(uuid.uuid4())
                 # Apply change to invoice
                 invoice_item.sales_invoice = invoice_data
                 
