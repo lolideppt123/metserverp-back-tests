@@ -98,8 +98,11 @@ class SalesInvoicePageView(APIView):
 
     def patch(self, request, id):
         data = json.loads(request.body.decode('utf-8'))
+        print("Sales Invoice Data: ", data)
+        
         invoice_data = data['sales_invoice']
         invoice_date = data['sales_date']
+
 
         try:
             invoice_item = get_object_or_404(SalesInvoice, pk=id)

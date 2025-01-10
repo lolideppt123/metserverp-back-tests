@@ -338,6 +338,7 @@ class RawMaterialsInventoryHistoryPageView(APIView):
 
     def get(self, request, material_pk):
         print("FIFED")
+        print("Material PK: ", material_pk)
         try:
             material = RawMaterials.objects.get(pk=material_pk)
         except RawMaterials.DoesNotExist:
@@ -349,7 +350,7 @@ class RawMaterialsInventoryHistoryPageView(APIView):
         # because transaction will be continous and need to get transactions even it's in the past year
         # only if they have stock
         material_inventory_transaction = RawMaterials_InventoryTransaction.objects.filter(
-            transaction_date__year=getYear,
+            # transaction_date__year=getYear,
             materials_inventory_pk__material_name=material
         ).select_related(
             'materials_inventory_pk',
@@ -673,7 +674,7 @@ class InventoryHistoryPageView(APIView):
         # Gets current year
         getYear = date.today().year
         inventory_transactions = InventoryTransaction.objects.filter(
-            transaction_date__year=getYear,
+            # transaction_date__year=getYear,
             inventory_pk__product_name=product
         ).select_related(
             'inventory_pk', 
