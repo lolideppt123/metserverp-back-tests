@@ -224,7 +224,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://localhost:3000",    # Docker
     "https://metserverp-frontend-production.up.railway.app",
-    "https://metserverp-front-tests-testing.up.railway.app/login",
+    "https://metserverp-front-tests-testing.up.railway.app",
 ]
 # CORS_ALLOW_ALL_ORIGINS = True
 
@@ -236,7 +236,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     "https://metserverp-frontend-production.up.railway.app",
-    "https://metserverp-front-tests-testing.up.railway.app/login",
+    "https://metserverp-front-tests-testing.up.railway.app",
 ]
 
 # AWS S3 Bucket Configuration
